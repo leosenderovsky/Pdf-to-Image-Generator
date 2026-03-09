@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, File as FileIcon, Image as ImageIcon, CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, Droplets, Download, X } from 'lucide-react';
-import { PDFDocument } from 'pdf-lib';
+import { UploadCloud, Image as ImageIcon, CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, Droplets, Download } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 type LogoPosition = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | 'center';
 
@@ -28,9 +30,10 @@ function App() {
       setSelectedPages([]);
       
       const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      setTotalPages(pdfDoc.getPageCount());
-      setSelectedPages(Array.from({ length: pdfDoc.getPageCount() }, (_, i) => i + 1));
+      const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+      const pdfDoc = await loadingTask.promise;
+      setTotalPages(pdfDoc.numPages);
+      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
     } else {
       alert('Please select a PDF file.');
     }
@@ -61,94 +64,71 @@ function App() {
     setGeneratedImages([]);
 
     const pdfArrayBuffer = await pdfFile.arrayBuffer();
-    const pdfDoc = await PDFDocument.load(pdfArrayBuffer);
+    const loadingTask = pdfjsLib.getDocument(pdfArrayBuffer);
+    const pdfDoc = await loadingTask.promise;
     const images: string[] = [];
 
-    let logoBytes: ArrayBuffer | null = null;
+    let logoImage: HTMLImageElement | null = null;
     if (logoFile) {
-      logoBytes = await logoFile.arrayBuffer();
+        logoImage = new Image();
+        logoImage.src = URL.createObjectURL(logoFile);
+        await new Promise(resolve => logoImage!.onload = resolve);
     }
 
     for (const pageNum of selectedPages) {
-      const newPdf = await PDFDocument.create();
-      const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum - 1]);
-      newPdf.addPage(copiedPage);
-
-      const page = newPdf.getPages()[0];
-      const { width, height } = page.getSize();
-      
-      if (logoBytes) {
-        const logoImage = await newPdf.embedPng(logoBytes);
-        const logoDims = logoImage.scale(0.2); // Scale logo to 20% of its original size
-
-        let x = 0, y = 0;
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2 });
         
-        switch(logoPosition) {
-          case 'topLeft':
-            x = 10;
-            y = height - logoDims.height - 10;
-            break;
-          case 'topRight':
-            x = width - logoDims.width - 10;
-            y = height - logoDims.height - 10;
-            break;
-          case 'bottomLeft':
-            x = 10;
-            y = 10;
-            break;
-          case 'bottomRight':
-            x = width - logoDims.width - 10;
-            y = 10;
-            break;
-          case 'center':
-            x = (width - logoDims.width) / 2;
-            y = (height - logoDims.height) / 2;
-            break;
-        }
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
 
-        page.drawImage(logoImage, {
-          x,
-          y,
-          width: logoDims.width,
-          height: logoDims.height,
-          opacity: logoPosition === 'center' ? logoOpacity : 1,
-        });
-      }
+        if (context) {
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport
+            };
+            
+            await page.render(renderContext).promise;
 
-      // This part is a placeholder for actual PDF to image conversion
-      // In a real app, you would use a library to render the PDF page to a canvas and then get a data URL
-      // For this example, we'll create a simplified representation.
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      
-      if (context) {
-        context.fillStyle = 'white';
-        context.fillRect(0, 0, width, height);
-        context.fillStyle = 'black';
-        context.font = '50px sans-serif';
-        context.textAlign = 'center';
-        context.fillText(`Page ${pageNum}`, width / 2, height / 2);
-        
-        if (logoBytes) {
-           const logoImg = new Image();
-           logoImg.src = URL.createObjectURL(new Blob([logoBytes]));
-           await new Promise(resolve => logoImg.onload = resolve);
-           
-           // The drawing logic here is simplified. For accurate placement and scaling,
-           // you'd replicate the logic from pdf-lib drawing.
-           context.globalAlpha = logoPosition === 'center' ? logoOpacity : 1;
-           // Simplified positioning for canvas preview
-           if (logoPosition === 'topLeft') context.drawImage(logoImg, 10, 10, 100, 100);
-           if (logoPosition === 'topRight') context.drawImage(logoImg, width - 110, 10, 100, 100);
-           if (logoPosition === 'bottomLeft') context.drawImage(logoImg, 10, height - 110, 100, 100);
-           if (logoPosition === 'bottomRight') context.drawImage(logoImg, width - 110, height - 110, 100, 100);
-           if (logoPosition === 'center') context.drawImage(logoImg, width/2 - 50, height/2 - 50, 100, 100);
-           context.globalAlpha = 1;
+            if (logoImage) {
+                const maxWidth = canvas.width * 0.15;
+                const scale = maxWidth / logoImage.width;
+                const logoWidth = logoImage.width * scale;
+                const logoHeight = logoImage.height * scale;
+                
+                let x = 0, y = 0;
+                
+                switch(logoPosition) {
+                    case 'topLeft':
+                        x = 10;
+                        y = 10;
+                        break;
+                    case 'topRight':
+                        x = canvas.width - logoWidth - 10;
+                        y = 10;
+                        break;
+                    case 'bottomLeft':
+                        x = 10;
+                        y = canvas.height - logoHeight - 10;
+                        break;
+                    case 'bottomRight':
+                        x = canvas.width - logoWidth - 10;
+                        y = canvas.height - logoHeight - 10;
+                        break;
+                    case 'center':
+                        x = (canvas.width - logoWidth) / 2;
+                        y = (canvas.height - logoHeight) / 2;
+                        break;
+                }
+
+                context.globalAlpha = logoPosition === 'center' ? logoOpacity : 1;
+                context.drawImage(logoImage, x, y, logoWidth, logoHeight);
+                context.globalAlpha = 1;
+            }
+            images.push(canvas.toDataURL('image/png'));
         }
-        images.push(canvas.toDataURL('image/png'));
-      }
     }
 
     setGeneratedImages(images);
