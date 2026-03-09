@@ -1,20 +1,20 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Conversor de PDF a Imágenes para Redes Sociales
 
-# Run and deploy your AI Studio app
+Esta aplicación te permite convertir cualquier documento PDF en una serie de imágenes optimizadas para diferentes formatos de redes sociales. También puedes añadir un logo personalizado como marca de agua o colocarlo en una de las esquinas de las imágenes.
 
-This contains everything you need to run your app locally.
+## Funcionalidades Principales
 
-View your app in AI Studio: https://ai.studio/apps/d0128f7e-9264-46ce-adfb-795a1c3a29f6
+-   **Conversión de PDF a Imagen:** Sube un archivo PDF y la aplicación convertirá cada página en una imagen independiente.
+-   **Formatos para Redes Sociales:** Elige entre varios formatos predefinidos adecuados para plataformas como Instagram, Facebook, Twitter y LinkedIn (p. ej., formato cuadrado, retrato, apaisado).
+-   **Añadir Logo:** Sube tu propio logo para aplicarlo a las imágenes generadas.
+-   **Posicionamiento del Logo:**
+    -   **Marca de Agua:** Coloca el logo en el centro de la imagen con un nivel de transparencia ajustable.
+    -   **Esquina:** Posiciona el logo en cualquiera de las cuatro esquinas de la imagen.
+-   **Descarga:** Descarga las imágenes generadas de forma individual o como un archivo ZIP.
 
-## Run Locally
+## ¿Cómo funciona?
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1.  **Sube tu PDF:** Selecciona el archivo PDF que deseas convertir.
+2.  **Sube tu Logo (Opcional):** Si quieres añadir una marca de agua, sube tu logo.
+3.  **Configura el Formato y el Logo:** Elige el formato de imagen para la red social que prefieras y la posición de tu logo.
+4.  **Genera y Descarga:** La aplicación procesará el PDF y podrás descargar las imágenes listas para publicar.
