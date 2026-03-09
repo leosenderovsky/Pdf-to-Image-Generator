@@ -1,32 +1,32 @@
 # 📄 PDF to Image Generator
 
-Convertí cualquier documento PDF en imágenes PNG, página por página, con la opción de agregarle un logo como marca de agua o en una esquina. Todo corre en el navegador, sin servidor, sin subir archivos a ningún lado.
+Convertí cualquier documento PDF en imágenes PNG, página por página, con la opción de agregarle un logo como marca de agua o en una esquina. Todo corre en el navegador — ningún archivo se sube a ningún servidor.
 
 ---
 
 ## ✨ Funcionalidades
 
 - **Carga de PDF** — Seleccioná cualquier archivo `.pdf` desde tu dispositivo
+- **Renderizado real** — Cada página se renderiza visualmente con toda su fidelidad usando PDF.js
 - **Selección de páginas** — Elegí cuáles páginas convertir; por defecto selecciona todas
-- **Logo opcional** — Subí tu logo en formato imagen y posicionalo donde quieras
-- **5 posiciones de logo** — Esquina superior izquierda, superior derecha, inferior izquierda, inferior derecha o centro como marca de agua
-- **Opacidad ajustable** — Cuando el logo está en el centro, podés controlar su transparencia (10% – 100%)
-- **Preview en tiempo real** — Las imágenes generadas aparecen en pantalla al instante
-- **Descarga individual** — Descargá cada imagen por separado (hover sobre la imagen)
-- **Descarga en ZIP** — Descargá todas las imágenes en un solo archivo `.zip`
+- **Logo opcional** — Subí tu logo en cualquier formato de imagen y posicionalo donde quieras
+- **5 posiciones de logo** — Superior izquierda, superior derecha, inferior izquierda, inferior derecha o centro como marca de agua
+- **Opacidad ajustable** — Cuando el logo va al centro, controlás su transparencia (10% – 100%)
+- **Preview instantáneo** — Las imágenes generadas aparecen en pantalla al momento
+- **Descarga individual** — Hover sobre cualquier imagen para descargarla como PNG
+- **Descarga en ZIP** — Todas las imágenes en un solo archivo `.zip` con un click
 
 ---
 
 ## 🖥️ Cómo usarla
 
-```
-1. Subí tu PDF             →  Click en el área de upload o arrastrá el archivo
-2. Subí tu logo (opcional) →  PNG, JPG o cualquier formato de imagen
-3. Elegí la posición       →  Grilla de 5 posiciones + opacidad si va al centro
-4. Seleccioná las páginas  →  Todas activas por defecto, deseleccioná las que no querés
-5. Generá las imágenes     →  Click en "Generate Images"
-6. Descargá                →  Individualmente o todo en ZIP
-```
+Subí tu PDF             →  Click en el área de upload o arrastrá el archivo
+Subí tu logo (opcional) →  PNG, JPG o cualquier formato de imagen
+Elegí la posición       →  Grilla de 5 posiciones + opacidad si va al centro
+Seleccioná las páginas  →  Todas activas por defecto, deseleccioná las que no querés
+Generá las imágenes     →  Click en "Generate Images"
+Descargá                →  Individualmente (hover) o todo en ZIP
+
 
 ---
 
@@ -38,11 +38,11 @@ Convertí cualquier documento PDF en imágenes PNG, página por página, con la 
 | TypeScript | 5.8 | Tipado estático |
 | Vite | 6.x | Build tool y dev server |
 | Tailwind CSS | 4.x | Estilos |
-| pdf-lib | — | Lectura y procesamiento de PDFs |
-| JSZip | — | Generación del archivo ZIP de descarga |
+| PDF.js (`pdfjs-dist`) | 5.x | Renderizado real de páginas PDF en canvas |
+| JSZip | 3.10 | Generación del archivo ZIP de descarga |
 | Lucide React | 0.546 | Iconografía |
 
-> **Nota:** El procesamiento ocurre íntegramente en el navegador usando la Web Canvas API. Ningún archivo se sube a ningún servidor.
+> El procesamiento ocurre íntegramente en el navegador usando PDF.js + Web Canvas API. Ningún archivo sale de tu dispositivo.
 
 ---
 
@@ -54,7 +54,6 @@ Convertí cualquier documento PDF en imágenes PNG, página por página, con la 
 - npm
 
 ### Pasos
-
 ```bash
 # 1. Clonar el repositorio
 git clone https://github.com/leosenderovsky/Pdf-to-Image-Generator.git
@@ -74,7 +73,6 @@ npm run dev
 La app queda disponible en `http://localhost:3000`.
 
 ### Scripts disponibles
-
 ```bash
 npm run dev      # Servidor de desarrollo
 npm run build    # Build de producción → carpeta /dist
@@ -86,7 +84,6 @@ npm run clean    # Limpia la carpeta /dist
 ---
 
 ## ⚙️ Variables de entorno
-
 ```env
 # Requerida para integraciones con Gemini AI (opcional según uso)
 GEMINI_API_KEY="tu_api_key_aqui"
@@ -95,13 +92,11 @@ GEMINI_API_KEY="tu_api_key_aqui"
 APP_URL="http://localhost:3000"
 ```
 
-> Si usás **Google AI Studio**, las variables se inyectan desde el panel de Secrets. No necesitás configurar nada manualmente.
+> Si usás **Google AI Studio / Firebase Studio**, las variables se inyectan automáticamente desde el panel de Secrets.
 
 ---
 
 ## 📁 Estructura del proyecto
-
-```
 Pdf-to-Image-Generator/
 ├── src/
 │   ├── App.tsx       # Componente principal — toda la lógica y UI
@@ -112,24 +107,21 @@ Pdf-to-Image-Generator/
 ├── tsconfig.json     # Configuración TypeScript
 ├── .env.example      # Template de variables de entorno
 └── metadata.json     # Metadata del proyecto (Google AI Studio)
-```
 
 ---
 
 ## ☁️ Despliegue
-
-El build genera archivos estáticos en `/dist`, compatibles con cualquier plataforma:
-
 ```bash
 npm run build
+# Carpeta /dist lista para subir a cualquier plataforma estática
 ```
 
-| Plataforma | Comando / Método |
+| Plataforma | Método |
 |---|---|
 | **Vercel** | `vercel deploy` |
 | **Netlify** | Drag & drop de la carpeta `/dist` |
 | **Firebase Hosting** | `firebase deploy` |
-| **GitHub Pages** | Subí el contenido de `/dist` a la rama `gh-pages` |
+| **GitHub Pages** | Contenido de `/dist` en rama `gh-pages` |
 
 ---
 
