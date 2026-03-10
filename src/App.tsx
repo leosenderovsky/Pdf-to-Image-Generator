@@ -20,6 +20,8 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [outputWidth, setOutputWidth] = useState<number>(1080);
+  const [outputHeight, setOutputHeight] = useState<number>(1080);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -77,18 +79,38 @@ function App() {
 
     for (const pageNum of selectedPages) {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2 });
-        
+
+        // Viewport nativo de la página (scale 1)
+        const nativeViewport = page.getViewport({ scale: 1 });
+
+        // Calcular scale para que la página quepa dentro del output
+        // manteniendo el aspect ratio (letterbox/pillarbox)
+        const scaleX = outputWidth / nativeViewport.width;
+        const scaleY = outputHeight / nativeViewport.height;
+        const scale = Math.min(scaleX, scaleY);
+
+        const scaledViewport = page.getViewport({ scale });
+
+        // Canvas de salida del tamaño exacto elegido por el usuario
         const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = outputWidth;
+        canvas.height = outputHeight;
         const context = canvas.getContext('2d');
 
         if (context) {
+            // Rellenar con blanco (o color detectado si se implementa esa feature)
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, outputWidth, outputHeight);
+
+            // Calcular offset para centrar la página en el canvas
+            const offsetX = (outputWidth - scaledViewport.width) / 2;
+            const offsetY = (outputHeight - scaledViewport.height) / 2;
+
+            // Renderizar PDF centrado con translate
             const renderContext = {
                 canvasContext: context,
-                viewport: viewport,
-                canvas: canvas
+                viewport: scaledViewport,
+                transform: [1, 0, 0, 1, offsetX, offsetY],
             };
             
             await page.render(renderContext).promise;
@@ -147,6 +169,16 @@ function App() {
     link.href = URL.createObjectURL(zipBlob);
     link.download = `${pdfName.replace('.pdf', '')}_images.zip`;
     link.click();
+  };
+
+  const handleDimensionChange = (
+    value: string,
+    setter: (n: number) => void
+  ) => {
+    const parsed = parseInt(value, 10);
+    if (!isNaN(parsed) && parsed >= 1) {
+      setter(Math.min(parsed, 8000)); // máximo razonable: 8000px
+    }
   };
 
   return (
@@ -242,6 +274,52 @@ function App() {
                   </div>
                 </div>
             )}
+
+            <div>
+              <label className="text-lg font-semibold mb-2 block">
+                Output Resolution
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 mb-1 block">Width (px)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8000"
+                    value={outputWidth}
+                    onChange={e => handleDimensionChange(e.target.value, setOutputWidth)}
+                    onBlur={e => {
+                      if (!e.target.value || parseInt(e.target.value) < 1) {
+                        setOutputWidth(1080);
+                      }
+                    }}
+                    className="w-full bg-gray-700 border border-gray-600 text-white
+                               rounded-lg px-3 py-2 text-sm focus:outline-none
+                               focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <span className="text-gray-400 mt-5">×</span>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 mb-1 block">Height (px)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8000"
+                    value={outputHeight}
+                    onChange={e => handleDimensionChange(e.target.value, setOutputHeight)}
+                    onBlur={e => {
+                      if (!e.target.value || parseInt(e.target.value) < 1) {
+                        setOutputHeight(1080);
+                      }
+                    }}
+                    className="w-full bg-gray-700 border border-gray-600 text-white
+                               rounded-lg px-3 py-2 text-sm focus:outline-none
+                               focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Min: 1px · Max: 8000px</p>
+            </div>
             
             {/* Process Button */}
             <button
