@@ -20,10 +20,8 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [outputWidth, setOutputWidth] = useState<number>(1080);
-  const [outputHeight, setOutputHeight] = useState<number>(1080);
-  const [widthStr, setWidthStr] = useState<string>('1080');
-  const [heightStr, setHeightStr] = useState<string>('1080');
+  const [outputWidth, setOutputWidth] = useState<number | ''>(1080);
+  const [outputHeight, setOutputHeight] = useState<number | ''>(1080);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,14 +65,11 @@ function App() {
     setIsProcessing(true);
     setGeneratedImages([]);
 
-    const safeWidth = Math.max(1, Math.min(8000, Math.round(outputWidth)));
-    const safeHeight = Math.max(1, Math.min(8000, Math.round(outputHeight)));
+    const widthToUse = (typeof outputWidth !== 'number' || outputWidth < 1) ? 1080 : outputWidth;
+    const heightToUse = (typeof outputHeight !== 'number' || outputHeight < 1) ? 1080 : outputHeight;
 
-    if (!safeWidth || !safeHeight || safeWidth <= 0 || safeHeight <= 0) {
-      alert('Please enter valid positive dimensions (1–8000px).');
-      setIsProcessing(false);
-      return;
-    }
+    const safeWidth = Math.max(1, Math.min(8000, Math.round(widthToUse)));
+    const safeHeight = Math.max(1, Math.min(8000, Math.round(heightToUse)));
 
     const pdfArrayBuffer = await pdfFile.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument(pdfArrayBuffer);
@@ -173,24 +168,6 @@ function App() {
     link.href = URL.createObjectURL(zipBlob);
     link.download = `${pdfName.replace('.pdf', '')}_images.zip`;
     link.click();
-  };
-
-  const handleWidthChange = (raw: string) => {
-    const digits = raw.replace(/[^0-9]/g, '');
-    setWidthStr(digits);
-    const num = parseInt(digits, 10);
-    if (!isNaN(num) && num >= 1 && num <= 8000) {
-      setOutputWidth(num);
-    }
-  };
-
-  const handleHeightChange = (raw: string) => {
-    const digits = raw.replace(/[^0-9]/g, '');
-    setHeightStr(digits);
-    const num = parseInt(digits, 10);
-    if (!isNaN(num) && num >= 1 && num <= 8000) {
-      setOutputHeight(num);
-    }
   };
 
   return (
@@ -295,25 +272,24 @@ function App() {
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 mb-1 block">Width (px)</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={widthStr}
-                    onKeyDown={(e) => {
-                      if (['-', '+', '.', 'e', 'E'].includes(e.key)) {
-                        e.preventDefault();
-                      }
+                    type="number"
+                    min="1"
+                    max="8000"
+                    value={outputWidth}
+                    onChange={e => {
+                        const val = e.target.value;
+                        setOutputWidth(val === '' ? '' : Number(val));
                     }}
-                    onChange={e => handleWidthChange(e.target.value)}
-                    onBlur={() => {
-                      const num = parseInt(widthStr, 10);
-                      const clamped = (!widthStr || isNaN(num) || num < 1)
-                        ? 1080
-                        : Math.min(num, 8000);
-                      setWidthStr(String(clamped));
-                      setOutputWidth(clamped);
+                    onBlur={e => {
+                        let num = Number(e.target.value);
+                        if (isNaN(num) || num < 1) {
+                          num = 1080;
+                        }
+                        if (num > 8000) {
+                          num = 8000;
+                        }
+                        setOutputWidth(num);
                     }}
-                    placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -323,25 +299,24 @@ function App() {
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 mb-1 block">Height (px)</label>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={heightStr}
-                    onKeyDown={(e) => {
-                      if (['-', '+', '.', 'e', 'E'].includes(e.key)) {
-                        e.preventDefault();
-                      }
+                    type="number"
+                    min="1"
+                    max="8000"
+                    value={outputHeight}
+                    onChange={e => {
+                        const val = e.target.value;
+                        setOutputHeight(val === '' ? '' : Number(val));
                     }}
-                    onChange={e => handleHeightChange(e.target.value)}
-                    onBlur={() => {
-                      const num = parseInt(heightStr, 10);
-                      const clamped = (!heightStr || isNaN(num) || num < 1)
-                        ? 1080
-                        : Math.min(num, 8000);
-                      setHeightStr(String(clamped));
-                      setOutputHeight(clamped);
+                    onBlur={e => {
+                        let num = Number(e.target.value);
+                        if (isNaN(num) || num < 1) {
+                          num = 1080;
+                        }
+                        if (num > 8000) {
+                          num = 8000;
+                        }
+                        setOutputHeight(num);
                     }}
-                    placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
