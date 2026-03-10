@@ -80,33 +80,26 @@ function App() {
     for (const pageNum of selectedPages) {
         const page = await pdfDoc.getPage(pageNum);
 
-        // Viewport nativo de la página (scale 1)
         const nativeViewport = page.getViewport({ scale: 1 });
 
-        // Calcular scale para que la página quepa dentro del output
-        // manteniendo el aspect ratio (letterbox/pillarbox)
         const scaleX = outputWidth / nativeViewport.width;
         const scaleY = outputHeight / nativeViewport.height;
         const scale = Math.min(scaleX, scaleY);
 
         const scaledViewport = page.getViewport({ scale });
 
-        // Canvas de salida del tamaño exacto elegido por el usuario
         const canvas = document.createElement('canvas');
         canvas.width = outputWidth;
         canvas.height = outputHeight;
         const context = canvas.getContext('2d');
 
         if (context) {
-            // Rellenar con blanco (o color detectado si se implementa esa feature)
             context.fillStyle = '#ffffff';
             context.fillRect(0, 0, outputWidth, outputHeight);
 
-            // Calcular offset para centrar la página en el canvas
             const offsetX = (outputWidth - scaledViewport.width) / 2;
             const offsetY = (outputHeight - scaledViewport.height) / 2;
 
-            // Renderizar PDF centrado con translate
             const renderContext = {
                 canvasContext: context,
                 viewport: scaledViewport,
@@ -175,9 +168,12 @@ function App() {
     value: string,
     setter: (n: number) => void
   ) => {
-    const parsed = parseInt(value, 10);
+    // Eliminar cualquier carácter que no sea dígito
+    const sanitized = value.replace(/[^0-9]/g, '');
+    if (sanitized === '') return; // No actualizar si queda vacío (permite borrar)
+    const parsed = parseInt(sanitized, 10);
     if (!isNaN(parsed) && parsed >= 1) {
-      setter(Math.min(parsed, 8000)); // máximo razonable: 8000px
+      setter(Math.min(parsed, 8000));
     }
   };
 
@@ -286,10 +282,21 @@ function App() {
                     type="number"
                     min="1"
                     max="8000"
+                    step="1"
                     value={outputWidth}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLInputElement;
+                      target.value = target.value.replace(/[^0-9]/g, '');
+                    }}
                     onChange={e => handleDimensionChange(e.target.value, setOutputWidth)}
-                    onBlur={e => {
-                      if (!e.target.value || parseInt(e.target.value) < 1) {
+                    onBlur={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!e.target.value || isNaN(val) || val < 1) {
                         setOutputWidth(1080);
                       }
                     }}
@@ -305,10 +312,21 @@ function App() {
                     type="number"
                     min="1"
                     max="8000"
+                    step="1"
                     value={outputHeight}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                        e.preventDefault();
+                      }
+                    }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLInputElement;
+                      target.value = target.value.replace(/[^0-9]/g, '');
+                    }}
                     onChange={e => handleDimensionChange(e.target.value, setOutputHeight)}
-                    onBlur={e => {
-                      if (!e.target.value || parseInt(e.target.value) < 1) {
+                    onBlur={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!e.target.value || isNaN(val) || val < 1) {
                         setOutputHeight(1080);
                       }
                     }}
