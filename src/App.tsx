@@ -67,6 +67,15 @@ function App() {
     setIsProcessing(true);
     setGeneratedImages([]);
 
+    const safeWidth = Math.max(1, Math.min(8000, Math.round(outputWidth)));
+    const safeHeight = Math.max(1, Math.min(8000, Math.round(outputHeight)));
+
+    if (!safeWidth || !safeHeight || safeWidth <= 0 || safeHeight <= 0) {
+      alert('Please enter valid positive dimensions (1–8000px).');
+      setIsProcessing(false);
+      return;
+    }
+
     const pdfArrayBuffer = await pdfFile.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument(pdfArrayBuffer);
     const pdfDoc = await loadingTask.promise;
@@ -84,23 +93,23 @@ function App() {
 
         const nativeViewport = page.getViewport({ scale: 1 });
 
-        const scaleX = outputWidth / nativeViewport.width;
-        const scaleY = outputHeight / nativeViewport.height;
+        const scaleX = safeWidth / nativeViewport.width;
+        const scaleY = safeHeight / nativeViewport.height;
         const scale = Math.min(scaleX, scaleY);
 
         const scaledViewport = page.getViewport({ scale });
 
         const canvas = document.createElement('canvas');
-        canvas.width = outputWidth;
-        canvas.height = outputHeight;
+        canvas.width = safeWidth;
+        canvas.height = safeHeight;
         const context = canvas.getContext('2d');
 
         if (context) {
             context.fillStyle = '#ffffff';
-            context.fillRect(0, 0, outputWidth, outputHeight);
+            context.fillRect(0, 0, safeWidth, safeHeight);
 
-            const offsetX = (outputWidth - scaledViewport.width) / 2;
-            const offsetY = (outputHeight - scaledViewport.height) / 2;
+            const offsetX = (safeWidth - scaledViewport.width) / 2;
+            const offsetY = (safeHeight - scaledViewport.height) / 2;
 
             const renderContext = {
                 canvasContext: context,
@@ -167,7 +176,7 @@ function App() {
   };
 
   const handleWidthChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, '');
+    const digits = raw.replace(/[^0-9]/g, '');
     setWidthStr(digits);
     const num = parseInt(digits, 10);
     if (!isNaN(num) && num >= 1 && num <= 8000) {
@@ -176,7 +185,7 @@ function App() {
   };
 
   const handleHeightChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, '');
+    const digits = raw.replace(/[^0-9]/g, '');
     setHeightStr(digits);
     const num = parseInt(digits, 10);
     if (!isNaN(num) && num >= 1 && num <= 8000) {
@@ -290,19 +299,19 @@ function App() {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={widthStr}
+                    onKeyDown={(e) => {
+                      if (['-', '+', '.', 'e', 'E'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                     onChange={e => handleWidthChange(e.target.value)}
                     onBlur={() => {
                       const num = parseInt(widthStr, 10);
-                      if (!widthStr || isNaN(num) || num < 1) {
-                        setWidthStr('1080');
-                        setOutputWidth(1080);
-                      } else if (num > 8000) {
-                        setWidthStr('8000');
-                        setOutputWidth(8000);
-                      } else {
-                        setWidthStr(String(num));
-                        setOutputWidth(num);
-                      }
+                      const clamped = (!widthStr || isNaN(num) || num < 1)
+                        ? 1080
+                        : Math.min(num, 8000);
+                      setWidthStr(String(clamped));
+                      setOutputWidth(clamped);
                     }}
                     placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
@@ -318,19 +327,19 @@ function App() {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={heightStr}
+                    onKeyDown={(e) => {
+                      if (['-', '+', '.', 'e', 'E'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                     onChange={e => handleHeightChange(e.target.value)}
                     onBlur={() => {
                       const num = parseInt(heightStr, 10);
-                      if (!heightStr || isNaN(num) || num < 1) {
-                        setHeightStr('1080');
-                        setOutputHeight(1080);
-                      } else if (num > 8000) {
-                        setHeightStr('8000');
-                        setOutputHeight(8000);
-                      } else {
-                        setHeightStr(String(num));
-                        setOutputHeight(num);
-                      }
+                      const clamped = (!heightStr || isNaN(num) || num < 1)
+                        ? 1080
+                        : Math.min(num, 8000);
+                      setHeightStr(String(clamped));
+                      setOutputHeight(clamped);
                     }}
                     placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
