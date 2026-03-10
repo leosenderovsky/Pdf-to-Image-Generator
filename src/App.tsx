@@ -170,6 +170,30 @@ function App() {
     link.click();
   };
 
+  const handleDimensionChange = (
+    value: string,
+    setter: React.Dispatch<React.SetStateAction<number | ''>>
+  ) => {
+    if (value === '') {
+      setter('');
+      return;
+    }
+    const num = Math.abs(Math.floor(Number(value)));
+    setter(num);
+  };
+
+  const handleDimensionBlur = (
+    value: number | '',
+    setter: React.Dispatch<React.SetStateAction<number | ''>>
+  ) => {
+    const num = Number(value);
+    if (isNaN(num) || num < 1) {
+      setter(1080);
+    } else if (num > 8000) {
+      setter(8000);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans flex items-center justify-center p-4">
       <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
@@ -276,20 +300,8 @@ function App() {
                     min="1"
                     max="8000"
                     value={outputWidth}
-                    onChange={e => {
-                        const val = e.target.value;
-                        setOutputWidth(val === '' ? '' : Number(val));
-                    }}
-                    onBlur={e => {
-                        let num = Number(e.target.value);
-                        if (isNaN(num) || num < 1) {
-                          num = 1080;
-                        }
-                        if (num > 8000) {
-                          num = 8000;
-                        }
-                        setOutputWidth(num);
-                    }}
+                    onChange={e => handleDimensionChange(e.target.value, setOutputWidth)}
+                    onBlur={() => handleDimensionBlur(outputWidth, setOutputWidth)}
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -303,20 +315,8 @@ function App() {
                     min="1"
                     max="8000"
                     value={outputHeight}
-                    onChange={e => {
-                        const val = e.target.value;
-                        setOutputHeight(val === '' ? '' : Number(val));
-                    }}
-                    onBlur={e => {
-                        let num = Number(e.target.value);
-                        if (isNaN(num) || num < 1) {
-                          num = 1080;
-                        }
-                        if (num > 8000) {
-                          num = 8000;
-                        }
-                        setOutputHeight(num);
-                    }}
+                    onChange={e => handleDimensionChange(e.target.value, setOutputHeight)}
+                    onBlur={() => handleDimensionBlur(outputHeight, setOutputHeight)}
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
