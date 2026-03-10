@@ -22,6 +22,8 @@ function App() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [outputWidth, setOutputWidth] = useState<number>(1080);
   const [outputHeight, setOutputHeight] = useState<number>(1080);
+  const [widthStr, setWidthStr] = useState<string>('1080');
+  const [heightStr, setHeightStr] = useState<string>('1080');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -164,16 +166,21 @@ function App() {
     link.click();
   };
 
-  const handleDimensionChange = (
-    value: string,
-    setter: (n: number) => void
-  ) => {
-    // Eliminar cualquier carácter que no sea dígito
-    const sanitized = value.replace(/[^0-9]/g, '');
-    if (sanitized === '') return; // No actualizar si queda vacío (permite borrar)
-    const parsed = parseInt(sanitized, 10);
-    if (!isNaN(parsed) && parsed >= 1) {
-      setter(Math.min(parsed, 8000));
+  const handleWidthChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setWidthStr(digits);
+    const num = parseInt(digits, 10);
+    if (!isNaN(num) && num >= 1 && num <= 8000) {
+      setOutputWidth(num);
+    }
+  };
+
+  const handleHeightChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setHeightStr(digits);
+    const num = parseInt(digits, 10);
+    if (!isNaN(num) && num >= 1 && num <= 8000) {
+      setOutputHeight(num);
     }
   };
 
@@ -279,27 +286,25 @@ function App() {
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 mb-1 block">Width (px)</label>
                   <input
-                    type="number"
-                    min="1"
-                    max="8000"
-                    step="1"
-                    value={outputWidth}
-                    onKeyDown={(e) => {
-                      if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
-                        e.preventDefault();
-                      }
-                    }}
-                    onInput={(e) => {
-                      const target = e.target as HTMLInputElement;
-                      target.value = target.value.replace(/[^0-9]/g, '');
-                    }}
-                    onChange={e => handleDimensionChange(e.target.value, setOutputWidth)}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!e.target.value || isNaN(val) || val < 1) {
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={widthStr}
+                    onChange={e => handleWidthChange(e.target.value)}
+                    onBlur={() => {
+                      const num = parseInt(widthStr, 10);
+                      if (!widthStr || isNaN(num) || num < 1) {
+                        setWidthStr('1080');
                         setOutputWidth(1080);
+                      } else if (num > 8000) {
+                        setWidthStr('8000');
+                        setOutputWidth(8000);
+                      } else {
+                        setWidthStr(String(num));
+                        setOutputWidth(num);
                       }
                     }}
+                    placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -309,27 +314,25 @@ function App() {
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 mb-1 block">Height (px)</label>
                   <input
-                    type="number"
-                    min="1"
-                    max="8000"
-                    step="1"
-                    value={outputHeight}
-                    onKeyDown={(e) => {
-                      if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
-                        e.preventDefault();
-                      }
-                    }}
-                    onInput={(e) => {
-                      const target = e.target as HTMLInputElement;
-                      target.value = target.value.replace(/[^0-9]/g, '');
-                    }}
-                    onChange={e => handleDimensionChange(e.target.value, setOutputHeight)}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!e.target.value || isNaN(val) || val < 1) {
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={heightStr}
+                    onChange={e => handleHeightChange(e.target.value)}
+                    onBlur={() => {
+                      const num = parseInt(heightStr, 10);
+                      if (!heightStr || isNaN(num) || num < 1) {
+                        setHeightStr('1080');
                         setOutputHeight(1080);
+                      } else if (num > 8000) {
+                        setHeightStr('8000');
+                        setOutputHeight(8000);
+                      } else {
+                        setHeightStr(String(num));
+                        setOutputHeight(num);
                       }
                     }}
+                    placeholder="1080"
                     className="w-full bg-gray-700 border border-gray-600 text-white
                                rounded-lg px-3 py-2 text-sm focus:outline-none
                                focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
