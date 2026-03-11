@@ -131,6 +131,35 @@ MIT — Libre para usar, modificar y distribuir con atribución.
 
 ---
 
+## 🔗 Cargar PDFs remotos (Google Drive / CORS)
+
+Si querés cargar PDFs desde una URL (por ejemplo un enlace público de Google Drive) podés encontrarte con errores 403 o con bloqueos por CORS. Causas comunes:
+
+- Los enlaces de Google Drive tipo "share" no siempre son enlaces de descarga directa y, en algunos casos, requieren cookies o una confirmación intermedia.
+- Muchos hosts no devuelven `Access-Control-Allow-Origin`, por lo que el navegador bloquea la petición.
+
+Opciones para resolverlo:
+
+- Frontend sólo: la app normaliza links comunes de Google Drive a la forma `https://drive.google.com/uc?export=download&id=FILEID` y intenta `fetch` directo. Funciona si el archivo es público y el host devuelve CORS permisivo.
+- Proxy (más fiable): desplegar un proxy serverless (Cloudflare Worker, Netlify Function, Vercel Serverless) que haga el fetch desde el servidor y reenvíe la respuesta con `Access-Control-Allow-Origin: *`.
+
+Ejemplo incluido: `cloudflare-worker-proxy.js` — un Worker mínimo que acepta `?url=` y retorna el recurso con cabeceras CORS. Desplegalo y pegá la URL del worker en el campo "Optional proxy" de la UI si un fetch directo falla.
+
+Si necesitás ayuda desplegando el Worker o creando una Function en Netlify/Vercel, avisame y te doy los pasos precisos.
+
+Serverless examples (Netlify / Vercel)
+
+Si preferís funciones serverless integradas en el mismo repo, hay dos ejemplos incluidos:
+
+- `netlify/functions/pdf-proxy.js` — función para Netlify. Endpoint de ejemplo cuando está desplegada: `https://your-site.netlify.app/.netlify/functions/pdf-proxy?url=...`
+- `api/pdf-proxy.js` — función para Vercel. Endpoint de ejemplo cuando está desplegada: `https://your-site.vercel.app/api/pdf-proxy?url=...`
+
+Ambas funciones hacen fetch server-side al recurso remoto y devuelven los bytes con `Access-Control-Allow-Origin: *`. Pegar la URL base en el campo "Optional proxy" de la app hará que la app envíe `?url=` al proxy.
+
+Notas:
+- Netlify devuelve la respuesta en base64 y marca `isBase64Encoded` como `true` (Netlify Functions). Vercel responde con el buffer binario directamente.
+- Para ficheros muy grandes revisá los límites del proveedor (Netlify/Vercel/Cloudflare). Si necesitás soporte para confirmaciones de descarga de Google Drive (páginas intermedias) se requiere lógica adicional server-side.
+
 <div align="center">
   <p>Hecho con IA y criterio humano · <a href="https://github.com/leosenderovsky">@leosenderovsky</a></p>
 </div>
