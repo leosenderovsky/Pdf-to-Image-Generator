@@ -639,6 +639,54 @@
     document.getElementById('file-input').addEventListener('change', handleFileSelect);
     document.getElementById('logo-input').addEventListener('change', handleLogoSelect);
     updatePreviewInfo();
+
+    // --- Input guards for custom resolution ---
+    const outW = document.getElementById('out-width');
+    const outH = document.getElementById('out-height');
+
+    const blockKeys = (e) => {
+      if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+        e.preventDefault();
+      }
+    };
+
+    const handlePaste = (e) => {
+      const pasted = (e.clipboardData || window.clipboardData).getData('text') || '';
+      if (pasted.includes('-')) {
+        e.preventDefault();
+      }
+    };
+
+    const handleInputSanitize = (e) => {
+      const el = e.target;
+      const raw = String(el.value || '').trim();
+      if (raw.includes('-')) {
+        el.value = '';
+        return;
+      }
+      el.value = raw.replace(/[^0-9]/g, '');
+    };
+
+    const handleBlurValidate = (e) => {
+      const el = e.target;
+      const num = Number(el.value);
+      if (!Number.isFinite(num) || num < 1) {
+        el.value = '1080';
+      } else if (num > 8000) {
+        el.value = '8000';
+      } else {
+        el.value = String(Math.round(num));
+      }
+      updatePreview();
+    };
+
+    [outW, outH].forEach(inp => {
+      if (!inp) return;
+      inp.addEventListener('keydown', blockKeys);
+      inp.addEventListener('paste', handlePaste);
+      inp.addEventListener('input', handleInputSanitize);
+      inp.addEventListener('blur', handleBlurValidate);
+    });
   }
 
   // --- UI Helpers ---
@@ -1055,8 +1103,8 @@
     updatePreviewInfo();
     if (!state.pdfDoc) return;
     
-    const w = parseInt(document.getElementById('out-width').value);
-    const h = parseInt(document.getElementById('out-height').value);
+    const w = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-width').value) || 1080)));
+    const h = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-height').value) || 1080)));
     
     const pageToRender = state.currentPagePreview || 1;
     const page = await state.pdfDoc.getPage(pageToRender);
@@ -1164,8 +1212,8 @@
   }
 
   async function exportSinglePage(pageNum, format) {
-    const w = parseInt(document.getElementById('out-width').value);
-    const h = parseInt(document.getElementById('out-height').value);
+    const w = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-width').value) || 1080)));
+    const h = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-height').value) || 1080)));
     const quality = parseInt(document.getElementById('export-quality').value) / 100;
     
     showLog(`Renderizando página ${pageNum}...`);
@@ -1189,8 +1237,8 @@
     if (state.selectedPages.length === 0) return;
     
     const format = document.getElementById('export-package-format').value;
-    const w = parseInt(document.getElementById('out-width').value);
-    const h = parseInt(document.getElementById('out-height').value);
+    const w = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-width').value) || 1080)));
+    const h = Math.max(1, Math.min(8000, Math.round(Number(document.getElementById('out-height').value) || 1080)));
     const quality = parseInt(document.getElementById('export-quality').value) / 100;
     
     setProgress(0);

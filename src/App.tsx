@@ -200,12 +200,14 @@ function App() {
     }
   };
 
-  const handleDimensionBlur = (value: number | '', setter: React.Dispatch<React.SetStateAction<number | ''>>, defaultValue: number) => {
+  const handleDimensionBlur = (value: number | string | '', setter: React.Dispatch<React.SetStateAction<number | ''>>, defaultValue: number) => {
     const num = Number(value);
     if (isNaN(num) || num < 1) {
       setter(defaultValue);
     } else if (num > 8000) {
       setter(8000);
+    } else {
+      setter(Math.round(num));
     }
   };
 
@@ -261,12 +263,12 @@ function App() {
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <label className="text-xs text-gray-400 mb-1 block">Ancho (px)</label>
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={() => handleDimensionBlur(outputWidth, setOutputWidth, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
+                      <input id="out-width" data-testid="out-width" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputWidth, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                     <span className="text-gray-400 mt-5">×</span>
                     <div className="flex-1">
                       <label className="text-xs text-gray-400 mb-1 block">Alto (px)</label>
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={() => handleDimensionBlur(outputHeight, setOutputHeight, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
+                      <input id="out-height" data-testid="out-height" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputHeight, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                   </div>
                   <button onClick={swapDimensions} className="w-full flex items-center justify-center gap-2 text-sm py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg"><RefreshCw size={14}/> Swap Horizontal / Vertical</button>
