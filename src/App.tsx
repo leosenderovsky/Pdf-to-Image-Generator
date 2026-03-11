@@ -120,7 +120,14 @@ function App() {
             const offsetX = (safeWidth - viewport.width) / 2;
             const offsetY = (safeHeight - viewport.height) / 2;
 
-            await page.render({ canvasContext: context, viewport, transform: [1, 0, 0, 1, offsetX, offsetY] }).promise;
+            context.save();
+            context.translate(offsetX, offsetY);
+            await page.render({
+              canvasContext: context,
+              viewport: viewport,
+              canvas: canvas
+            }).promise;
+            context.restore();
 
             if (logoImage) {
                 const maxWidth = canvas.width * 0.15;
