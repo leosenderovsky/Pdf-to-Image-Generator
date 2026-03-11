@@ -160,6 +160,19 @@ Notas:
 - Netlify devuelve la respuesta en base64 y marca `isBase64Encoded` como `true` (Netlify Functions). Vercel responde con el buffer binario directamente.
 - Para ficheros muy grandes revisá los límites del proveedor (Netlify/Vercel/Cloudflare). Si necesitás soporte para confirmaciones de descarga de Google Drive (páginas intermedias) se requiere lógica adicional server-side.
 
+### 🧭 Cambios recientes (desde la última modificación del README)
+
+- Añadida carga por URL en el frontend: ahora la app acepta una URL pública y la intenta descargar con `fetch`.
+- Normalización de enlaces de Google Drive: la app intenta convertir enlaces de "share" a `https://drive.google.com/uc?export=download&id=FILEID` antes de hacer `fetch`.
+- Campo opcional `proxy` en la UI: si `fetch` directo falla por CORS/403, podés indicar un proxy serverless para que la app lo use como fallback.
+- Ejemplos de proxy incluidos en el repo:
+  - `netlify/functions/pdf-proxy.js` — Netlify Function que hace fetch server-side y devuelve bytes con CORS.
+  - `api/pdf-proxy.js` — ejemplo para Vercel Serverless.
+  - `cloudflare-worker-proxy.js` — ejemplo de Cloudflare Worker minimal.
+- Mejoras en la Netlify Function: ahora analiza páginas del visualizador de Drive, decodifica entidades HTML y prioriza la URL directa `drive.usercontent.google.com/uc?...` cuando está embebida en la página. Si no la encuentra, intenta extraer el token `confirm` y el `id` y reintenta la descarga.
+- Notas de despliegue y límites: la función Netlify responde en base64 (marca `isBase64Encoded`) y puede necesitar ajustes para ficheros muy grandes o flujos que requieran cookies/JS ejecutado por Drive.
+- Estado actual: proxy probado con PDFs públicos directos (OK); algunos enlaces de Google Drive aún requieren manejo adicional según la respuesta HTML de Drive (implementado intento de extracción — seguiré afinando si es necesario).
+
 <div align="center">
   <p>Hecho con IA y criterio humano · <a href="https://github.com/leosenderovsky">@leosenderovsky</a></p>
 </div>
