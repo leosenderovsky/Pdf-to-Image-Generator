@@ -84,11 +84,13 @@ function App() {
     setIsProcessing(true);
     setGeneratedImages([]);
 
-    const widthToUse = (typeof finalDimensions.width !== 'number' || finalDimensions.width < 1) ? 1080 : finalDimensions.width;
-    const heightToUse = (typeof finalDimensions.height !== 'number' || finalDimensions.height < 1) ? 1080 : finalDimensions.height;
-    
-    const safeWidth = Math.max(1, Math.min(8000, Math.round(widthToUse)));
-    const safeHeight = Math.max(1, Math.min(8000, Math.round(heightToUse)));
+    let parsedWidth = Number(finalDimensions.width);
+    if (!Number.isFinite(parsedWidth) || parsedWidth < 1) parsedWidth = 1080;
+    let parsedHeight = Number(finalDimensions.height);
+    if (!Number.isFinite(parsedHeight) || parsedHeight < 1) parsedHeight = 1080;
+
+    const safeWidth = Math.max(1, Math.min(8000, Math.round(parsedWidth)));
+    const safeHeight = Math.max(1, Math.min(8000, Math.round(parsedHeight)));
 
     const pdfArrayBuffer = await pdfFile.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument(pdfArrayBuffer);
@@ -168,12 +170,33 @@ function App() {
   };
 
   const handleDimensionChange = (value: string, setter: React.Dispatch<React.SetStateAction<number | ''>>) => {
-    const sanitizedValue = value.replace(/[^0-9]/g, '');
+    const raw = String(value || '').trim();
+    // If user typed or pasted a minus sign, treat as empty (block negatives)
+    if (raw.includes('-')) {
+      setter('');
+      return;
+    }
+    const sanitizedValue = raw.replace(/[^0-9]/g, '');
     if (sanitizedValue === '') {
       setter('');
     } else {
       const num = parseInt(sanitizedValue, 10);
       setter(num);
+    }
+  };
+
+  const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Prevent characters that lead to negative/exponential/decimal input in number fields
+    if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
+      e.preventDefault();
+    }
+  };
+
+  const handlePasteNumeric = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text') || '';
+    // Block paste that would introduce a negative value
+    if (pasted.includes('-')) {
+      e.preventDefault();
     }
   };
 
@@ -238,12 +261,12 @@ function App() {
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <label className="text-xs text-gray-400 mb-1 block">Ancho (px)</label>
-                      <input type="text" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={() => handleDimensionBlur(outputWidth, setOutputWidth, 1080)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={() => handleDimensionBlur(outputWidth, setOutputWidth, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                     <span className="text-gray-400 mt-5">×</span>
                     <div className="flex-1">
                       <label className="text-xs text-gray-400 mb-1 block">Alto (px)</label>
-                      <input type="text" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={() => handleDimensionBlur(outputHeight, setOutputHeight, 1080)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={() => handleDimensionBlur(outputHeight, setOutputHeight, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                   </div>
                   <button onClick={swapDimensions} className="w-full flex items-center justify-center gap-2 text-sm py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg"><RefreshCw size={14}/> Swap Horizontal / Vertical</button>
