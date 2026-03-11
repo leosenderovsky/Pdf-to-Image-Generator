@@ -18,35 +18,60 @@ exports.handler = async function(event, context) {
     if (isDrive && contentType.includes('text/html')) {
       const html = Buffer.from(arrayBuffer).toString('utf8');
 
-      // Attempt several strategies to extract confirm token and file id
+      // Normalize HTML (unescape common entity) to simplify matching
+      const decoded = html.replace(/&amp;/g, '&');
+
+      // 1) Try to find a direct usercontent download URL embedded in the viewer
+      const usercontentMatch = decoded.match(/https:\/\/drive\.usercontent\.google\.com\/uc\?[^"'<>\s]+/i);
+      if (usercontentMatch) {
+        const dlUrl = usercontentMatch[0];
+        const finalRes = await fetch(dlUrl, { method: 'GET', redirect: 'follow' });
+        const finalContentType = finalRes.headers.get('content-type') || 'application/octet-stream';
+        const finalBuffer = await finalRes.arrayBuffer();
+        const finalBody = Buffer.from(finalBuffer).toString('base64');
+
+        return {
+          statusCode: finalRes.status,
+          headers: {
+            'Content-Type': finalContentType,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+          },
+          body: finalBody,
+          isBase64Encoded: true
+        };
+      }
+
+      // 2) Attempt several strategies to extract confirm token and file id (use decoded HTML)
       let confirm = null;
       let id = null;
 
-      // 1) look for /uc?export=download&amp;confirm=TOKEN&amp;id=FILEID
-      let m = html.match(/\/uc\?export=download&amp;confirm=([^"'&>]+)&amp;id=([^"'&>]+)/);
+      // look for /uc?export=download&confirm=TOKEN&id=FILEID
+      let m = decoded.match(/\/uc\?export=download&confirm=([^"'&>]+)&id=([^"'&>]+)/);
       if (m) {
         confirm = m[1];
         id = m[2];
       }
 
-      // 2) look for confirm=TOKEN&amp;id=FILEID
+      // look for confirm=TOKEN&id=FILEID
       if (!confirm || !id) {
-        m = html.match(/confirm=([^"'&>]+)&amp;id=([^"'&>]+)/);
+        m = decoded.match(/confirm=([^"'&>]+)&id=([^"'&>]+)/);
         if (m) {
           confirm = m[1];
           id = m[2];
         }
       }
 
-      // 3) look for inputs: name="confirm" value="TOKEN" and name="id" value="FILEID"
+      // look for inputs: name="confirm" value="TOKEN" and name="id" value="FILEID"
       if (!confirm || !id) {
-        const mc = html.match(/name=\"confirm\"[^>]*value=\"([^\"]+)\"/i);
-        const mi = html.match(/name=\"id\"[^>]*value=\"([^\"]+)\"/i);
+        const mc = decoded.match(/name=\"confirm\"[^>]*value=\"([^\"]+)\"/i);
+        const mi = decoded.match(/name=\"id\"[^>]*value=\"([^\"]+)\"/i);
         if (mc) confirm = mc[1];
         if (mi) id = mi[1];
       }
 
-      // 4) fallback: extract id from original URL if present
+      // fallback: extract id from original URL if present
       if (!id) {
         const mId = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
         if (mId) id = mId[1];
