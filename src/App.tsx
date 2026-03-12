@@ -46,23 +46,23 @@ function App() {
   }, [resolutionMode, outputWidth, outputHeight, socialPreset]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
-      setPdfBuffer(await file.arrayBuffer());
-      setPdfName(file.name);
-      setGeneratedImages([]);
-      setSelectedPages([]);
-      
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-      const pdfDoc = await loadingTask.promise;
-      setTotalPages(pdfDoc.numPages);
-      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
-    } else {
-      alert('Please select a PDF file.');
-    }
-  };
+  const file = e.target.files?.[0];
+  if (file && file.type === "application/pdf") {
+    const buf = await file.arrayBuffer();   // ← una sola lectura
+    setPdfFile(file);
+    setPdfBuffer(buf);
+    setPdfName(file.name);
+    setGeneratedImages([]);
+    setSelectedPages([]);
+
+    const loadingTask = pdfjsLib.getDocument(buf);  // reutiliza el mismo buffer
+    const pdfDoc = await loadingTask.promise;
+    setTotalPages(pdfDoc.numPages);
+    setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
+  } else {
+    alert("Please select a PDF file.");
+  }
+};
 
   const normalizeGoogleDriveUrl = (url: string) => {
     try {
@@ -80,37 +80,37 @@ function App() {
     return url;
   };
 
-  const fetchPdfBufferFromUrl = async (url: string) : Promise<ArrayBuffer> => {
-    const normalized = normalizeGoogleDriveUrl(url);
-    const tryFetch = async (target: string) => {
-      const res = await fetch(target, { method: 'GET', mode: 'cors', redirect: 'follow' });
-      if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-      return await res.arrayBuffer();
-    };
+  const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
+  // 1️⃣  Proxy serverless (evita CORS — funciona para cualquier URL pública)
+  const proxyEndpoint = `/api/fetch-pdf?url=${encodeURIComponent(url)}`;
+  try {
+    const res = await fetch(proxyEndpoint);
+    if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
+    return await res.arrayBuffer();
+  } catch (proxyErr) {
+    console.warn("Proxy fetch failed, trying direct…", proxyErr);
+  }
 
+  // 2️⃣  Fallback: intento directo (funciona si el servidor tiene CORS abierto)
+  const normalized = normalizeGoogleDriveUrl(url);
+  try {
+    const res = await fetch(normalized, { mode: "cors", redirect: "follow" });
+    if (!res.ok) throw new Error(`Direct fetch failed: ${res.status} ${res.statusText}`);
+    return await res.arrayBuffer();
+  } catch (_) { /* noop */ }
+
+  if (normalized !== url) {
     try {
-      return await tryFetch(normalized);
-    } catch (err) {
-      // try original
-    }
-
-    if (normalized !== url) {
-      try {
-        return await tryFetch(url);
-      } catch (err) {
-        // fallthrough to proxy
-      }
-    }
-
-    if (proxyUrl) {
-      const proxied = `${proxyUrl.replace(/\/$/, '')}/?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxied, { method: 'GET' });
-      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status} ${res.statusText}`);
+      const res = await fetch(url, { mode: "cors", redirect: "follow" });
+      if (!res.ok) throw new Error(`Direct fetch (original URL) failed: ${res.status}`);
       return await res.arrayBuffer();
-    }
+    } catch (_) { /* noop */ }
+  }
 
-    throw new Error('Unable to fetch PDF directly. CORS or permission error. Consider using a proxy.')
-  };
+  throw new Error(
+    "No se pudo cargar el PDF. Asegurate de que el archivo sea público y la URL sea directa."
+  );
+};
 
   const handleLoadFromUrl = async () => {
     if (!urlInput) return alert('Please enter a URL');
@@ -398,10 +398,8 @@ function App() {
             )}
             
             {/* Process Button */}
-            // App.tsx — línea 401
-          <button  onClick={processPdf}  
-          disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
+            <button onClick={processPdf} disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
+              {isProcessing ? 'Processing...' : 'Generate Images'}
             </button>
           </div>
 
