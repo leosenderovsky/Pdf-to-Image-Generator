@@ -343,6 +343,15 @@ function App() {
               </h3>
             </div>
             
+            {/* Headers */}
+            <div>
+              <h1 className="text-4xl font-bold text-indigo-400 mb-3">PDF a imagen</h1>
+              <h2 className="text-lg text-gray-300 mb-2">Convierte tu documento a imágenes e incluye tu marca de agua</h2>
+              <h3 className="text-sm text-gray-400">
+                <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-300 transition-colors underline">by sender.ia</a>
+              </h3>
+            </div>
+
             {/* 1. PDF Uploader */}
             <div>
               <label className="text-lg font-semibold mb-2 block">1. Cargar documento</label>
