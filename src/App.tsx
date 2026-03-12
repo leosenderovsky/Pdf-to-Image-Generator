@@ -82,7 +82,7 @@ function App() {
 
   const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
   // 1️⃣  Proxy serverless (evita CORS — funciona para cualquier URL pública)
-  const proxyEndpoint = `/api/fetch-pdf?url=${encodeURIComponent(url)}`;
+const proxyEndpoint = `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`;
   try {
     const res = await fetch(proxyEndpoint);
     if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
