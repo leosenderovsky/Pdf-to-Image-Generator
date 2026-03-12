@@ -321,13 +321,27 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans flex items-center justify-center p-4">
       <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
-        <h1 className="text-5xl font-bold text-center mb-2 text-indigo-400">PDF a imagen</h1>
-        <h2 className="text-2xl text-center text-gray-400 mb-2">Convertidor online</h2>
-        <h3 className="text-xl text-center text-gray-500 mb-8">by <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">sender.ia</a></h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Left Column: Configuration */}
           <div className="space-y-6">
+
+            {/* Header sender.ia */}
+            <div className="text-center mb-6">
+              <h1 className="text-3xl font-bold text-white">PDF a imagen</h1>
+              <h2 className="text-lg font-medium text-indigo-400 mt-1">Convertidor online</h2>
+              <h3 className="text-sm text-gray-400 mt-1">
+                by{" "}
+                <a
+                  href="https://www.instagram.com/sender.ia/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-300 hover:text-indigo-100 underline underline-offset-2 transition-colors"
+                >
+                  sender.ia
+                </a>
+              </h3>
+            </div>
             
             {/* 1. PDF Uploader */}
             <div>
@@ -465,8 +479,3 @@ function App() {
 }
 
 export default App;
-
-
-
-
-
