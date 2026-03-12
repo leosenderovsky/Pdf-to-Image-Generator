@@ -321,13 +321,19 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans flex items-center justify-center p-4">
       <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-2 text-indigo-400">PDF to Image Generator</h1>
-        <p className="text-center text-gray-400 mb-8">Convert your PDF pages into images, with custom watermarks.</p>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Left Column: Configuration */}
           <div className="space-y-6">
             
+            {/* Headers */}
+            <div>
+              <h1 className="text-4xl font-bold text-indigo-400 mb-3">PDF a imagen</h1>
+              <h2 className="text-lg text-gray-300 mb-2">Convierte tu documento a imágenes e incluye tu marca de agua</h2>
+              <h3 className="text-sm text-gray-400">
+                <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-300 transition-colors underline">by sender.ia</a>
+              </h3>
+            </div>
+
             {/* 1. PDF Uploader */}
             <div>
               <label className="text-lg font-semibold mb-2 block">1. Upload PDF</label>
