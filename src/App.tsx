@@ -46,23 +46,23 @@ function App() {
   }, [resolutionMode, outputWidth, outputHeight, socialPreset]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
-      setPdfBuffer(await file.arrayBuffer());
-      setPdfName(file.name);
-      setGeneratedImages([]);
-      setSelectedPages([]);
-      
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-      const pdfDoc = await loadingTask.promise;
-      setTotalPages(pdfDoc.numPages);
-      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
-    } else {
-      alert('Please select a PDF file.');
-    }
-  };
+  const file = e.target.files?.[0];
+  if (file && file.type === "application/pdf") {
+    const buf = await file.arrayBuffer();   // ← una sola lectura
+    setPdfFile(file);
+    setPdfBuffer(buf);
+    setPdfName(file.name);
+    setGeneratedImages([]);
+    setSelectedPages([]);
+
+    const loadingTask = pdfjsLib.getDocument(buf);  // reutiliza el mismo buffer
+    const pdfDoc = await loadingTask.promise;
+    setTotalPages(pdfDoc.numPages);
+    setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
+  } else {
+    alert("Please select a PDF file.");
+  }
+};
 
   const normalizeGoogleDriveUrl = (url: string) => {
     try {
@@ -80,36 +80,64 @@ function App() {
     return url;
   };
 
-  const fetchPdfBufferFromUrl = async (url: string) : Promise<ArrayBuffer> => {
-    const normalized = normalizeGoogleDriveUrl(url);
-    const tryFetch = async (target: string) => {
-      const res = await fetch(target, { method: 'GET', mode: 'cors', redirect: 'follow' });
-      if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-      return await res.arrayBuffer();
-    };
-
+  const buildProxyUrl = (proxyBase: string, targetUrl: string) => {
+    const trimmed = proxyBase.trim();
+    if (!trimmed) return '';
+    if (trimmed.includes('{url}')) {
+      return trimmed.replace('{url}', encodeURIComponent(targetUrl));
+    }
     try {
-      return await tryFetch(normalized);
-    } catch (err) {
-      // try original
+      const resolved = new URL(trimmed, window.location.origin);
+      resolved.searchParams.set('url', targetUrl);
+      return resolved.toString();
+    } catch (_) {
+      const joiner = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${joiner}url=${encodeURIComponent(targetUrl)}`;
+    }
+  };
+
+  const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
+    const proxyCandidates: string[] = [];
+    const trimmedProxy = proxyUrl.trim();
+    if (trimmedProxy) {
+      const built = buildProxyUrl(trimmedProxy, url);
+      if (built) proxyCandidates.push(built);
     }
 
-    if (normalized !== url) {
+    // Default Netlify proxy (server-side fetch, avoids CORS)
+    proxyCandidates.push(`/api/fetch-pdf?url=${encodeURIComponent(url)}`);
+    // Legacy fallback
+    proxyCandidates.push(`/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`);
+
+    for (const proxyEndpoint of proxyCandidates) {
       try {
-        return await tryFetch(url);
-      } catch (err) {
-        // fallthrough to proxy
+        const res = await fetch(proxyEndpoint);
+        if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
+        return await res.arrayBuffer();
+      } catch (proxyErr) {
+        console.warn("Proxy fetch failed, trying next...", proxyErr);
       }
     }
 
-    if (proxyUrl) {
-      const proxied = `${proxyUrl.replace(/\/$/, '')}/?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxied, { method: 'GET' });
-      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status} ${res.statusText}`);
+    // Fallback: direct fetch (only works if the server allows CORS)
+    const normalized = normalizeGoogleDriveUrl(url);
+    try {
+      const res = await fetch(normalized, { mode: "cors", redirect: "follow" });
+      if (!res.ok) throw new Error(`Direct fetch failed: ${res.status} ${res.statusText}`);
       return await res.arrayBuffer();
+    } catch (_) { /* noop */ }
+
+    if (normalized !== url) {
+      try {
+        const res = await fetch(url, { mode: "cors", redirect: "follow" });
+        if (!res.ok) throw new Error(`Direct fetch (original URL) failed: ${res.status}`);
+        return await res.arrayBuffer();
+      } catch (_) { /* noop */ }
     }
 
-    throw new Error('Unable to fetch PDF directly. CORS or permission error. Consider using a proxy.')
+    throw new Error(
+      "No se pudo cargar el PDF. Asegurate de que el archivo sea publico y la URL sea directa."
+    );
   };
 
   const handleLoadFromUrl = async () => {
@@ -315,8 +343,8 @@ function App() {
                   <input type="text" placeholder="https://example.com/file.pdf or Google Drive link" value={urlInput} onChange={e => setUrlInput(e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
                   <button onClick={handleLoadFromUrl} disabled={isProcessing} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded-lg text-sm">Load</button>
                 </div>
-                <label className="text-xs text-gray-400 mt-2 block">Optional proxy (use if direct fetch fails):</label>
-                <input type="text" placeholder="https://your-proxy.example" value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                <label className="text-xs text-gray-400 mt-2 block">Custom proxy (optional): use {'{url}'} or ?url=, or leave blank to use built-in proxy.</label>
+                <input type="text" placeholder="https://your-proxy.example?url={url}" value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
               </div>
             </div>
 
@@ -399,7 +427,7 @@ function App() {
             )}
             
             {/* Process Button */}
-            <button onClick={processPdf} disabled={!pdfFile || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
+            <button onClick={processPdf} disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
               {isProcessing ? 'Processing...' : 'Generate Images'}
             </button>
           </div>
@@ -437,3 +465,8 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
