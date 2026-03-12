@@ -293,8 +293,9 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans flex items-center justify-center p-4">
       <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-2 text-indigo-400">PDF to Image Generator</h1>
-        <p className="text-center text-gray-400 mb-8">Convert your PDF pages into images, with custom watermarks.</p>
+        <h1 className="text-5xl font-bold text-center mb-2 text-indigo-400">PDF a imagen</h1>
+        <h2 className="text-2xl text-center text-gray-400 mb-2">Convertidor online</h2>
+        <h3 className="text-xl text-center text-gray-500 mb-8">by <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">sender.ia</a></h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Left Column: Configuration */}
@@ -302,7 +303,7 @@ function App() {
             
             {/* 1. PDF Uploader */}
             <div>
-              <label className="text-lg font-semibold mb-2 block">1. Upload PDF</label>
+              <label className="text-lg font-semibold mb-2 block">1. Cargar documento</label>
               <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700" onClick={() => fileInputRef.current?.click()}>
                 <UploadCloud className="w-10 h-10 text-gray-400 mb-2" />
                 {pdfFile ? <div className="text-center"><p className="font-semibold text-indigo-400">{pdfName}</p><span className="text-sm text-gray-400">{totalPages} pages</span></div> : <p className="text-gray-400">Click to upload or drag & drop</p>}
