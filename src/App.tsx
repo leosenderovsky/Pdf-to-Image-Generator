@@ -398,8 +398,10 @@ function App() {
             )}
             
             {/* Process Button */}
-            <button onClick={processPdf} disabled={!pdfFile || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
-              {isProcessing ? 'Processing...' : 'Generate Images'}
+            // App.tsx — línea 401
+          <button  onClick={processPdf}  
+          disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
             </button>
           </div>
 
