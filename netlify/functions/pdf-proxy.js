@@ -1,7 +1,7 @@
 // Netlify Function: netlify/functions/pdf-proxy.js
 // Deploy by adding to your repo; Netlify will auto-detect functions in /netlify/functions
 
-exports.handler = async function(event, context) {
+export default async function handler(event, context) {
   const url = event.queryStringParameters && event.queryStringParameters.url;
   if (!url) {
     return { statusCode: 400, body: 'Missing url parameter' };
@@ -120,4 +120,4 @@ exports.handler = async function(event, context) {
   } catch (err) {
     return { statusCode: 500, body: 'Error fetching target: ' + String(err) };
   }
-};
+}

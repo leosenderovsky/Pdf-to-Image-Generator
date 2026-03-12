@@ -6,8 +6,6 @@
 [dev]
   functions = "netlify/functions"
 
-[build]
-  functions = "netlify/functions"
 
 [[redirects]]
   from   = "/api/*"

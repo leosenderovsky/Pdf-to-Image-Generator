@@ -80,37 +80,65 @@ function App() {
     return url;
   };
 
-  const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
-  // 1️⃣  Proxy serverless (evita CORS — funciona para cualquier URL pública)
-const proxyEndpoint = `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`;
-  try {
-    const res = await fetch(proxyEndpoint);
-    if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
-    return await res.arrayBuffer();
-  } catch (proxyErr) {
-    console.warn("Proxy fetch failed, trying direct…", proxyErr);
-  }
-
-  // 2️⃣  Fallback: intento directo (funciona si el servidor tiene CORS abierto)
-  const normalized = normalizeGoogleDriveUrl(url);
-  try {
-    const res = await fetch(normalized, { mode: "cors", redirect: "follow" });
-    if (!res.ok) throw new Error(`Direct fetch failed: ${res.status} ${res.statusText}`);
-    return await res.arrayBuffer();
-  } catch (_) { /* noop */ }
-
-  if (normalized !== url) {
+  const buildProxyUrl = (proxyBase: string, targetUrl: string) => {
+    const trimmed = proxyBase.trim();
+    if (!trimmed) return '';
+    if (trimmed.includes('{url}')) {
+      return trimmed.replace('{url}', encodeURIComponent(targetUrl));
+    }
     try {
-      const res = await fetch(url, { mode: "cors", redirect: "follow" });
-      if (!res.ok) throw new Error(`Direct fetch (original URL) failed: ${res.status}`);
+      const resolved = new URL(trimmed, window.location.origin);
+      resolved.searchParams.set('url', targetUrl);
+      return resolved.toString();
+    } catch (_) {
+      const joiner = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${joiner}url=${encodeURIComponent(targetUrl)}`;
+    }
+  };
+
+  const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
+    const proxyCandidates: string[] = [];
+    const trimmedProxy = proxyUrl.trim();
+    if (trimmedProxy) {
+      const built = buildProxyUrl(trimmedProxy, url);
+      if (built) proxyCandidates.push(built);
+    }
+
+    // Default Netlify proxy (server-side fetch, avoids CORS)
+    proxyCandidates.push(`/api/fetch-pdf?url=${encodeURIComponent(url)}`);
+    // Legacy fallback
+    proxyCandidates.push(`/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`);
+
+    for (const proxyEndpoint of proxyCandidates) {
+      try {
+        const res = await fetch(proxyEndpoint);
+        if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
+        return await res.arrayBuffer();
+      } catch (proxyErr) {
+        console.warn("Proxy fetch failed, trying next...", proxyErr);
+      }
+    }
+
+    // Fallback: direct fetch (only works if the server allows CORS)
+    const normalized = normalizeGoogleDriveUrl(url);
+    try {
+      const res = await fetch(normalized, { mode: "cors", redirect: "follow" });
+      if (!res.ok) throw new Error(`Direct fetch failed: ${res.status} ${res.statusText}`);
       return await res.arrayBuffer();
     } catch (_) { /* noop */ }
-  }
 
-  throw new Error(
-    "No se pudo cargar el PDF. Asegurate de que el archivo sea público y la URL sea directa."
-  );
-};
+    if (normalized !== url) {
+      try {
+        const res = await fetch(url, { mode: "cors", redirect: "follow" });
+        if (!res.ok) throw new Error(`Direct fetch (original URL) failed: ${res.status}`);
+        return await res.arrayBuffer();
+      } catch (_) { /* noop */ }
+    }
+
+    throw new Error(
+      "No se pudo cargar el PDF. Asegurate de que el archivo sea publico y la URL sea directa."
+    );
+  };
 
   const handleLoadFromUrl = async () => {
     if (!urlInput) return alert('Please enter a URL');
@@ -314,8 +342,8 @@ const proxyEndpoint = `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(ur
                   <input type="text" placeholder="https://example.com/file.pdf or Google Drive link" value={urlInput} onChange={e => setUrlInput(e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
                   <button onClick={handleLoadFromUrl} disabled={isProcessing} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded-lg text-sm">Load</button>
                 </div>
-                <label className="text-xs text-gray-400 mt-2 block">Optional proxy (use if direct fetch fails):</label>
-                <input type="text" placeholder="https://your-proxy.example" value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                <label className="text-xs text-gray-400 mt-2 block">Custom proxy (optional): use {'{url}'} or ?url=, or leave blank to use built-in proxy.</label>
+                <input type="text" placeholder="https://your-proxy.example?url={url}" value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
               </div>
             </div>
 
@@ -436,3 +464,8 @@ const proxyEndpoint = `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(ur
 }
 
 export default App;
+
+
+
+
+
