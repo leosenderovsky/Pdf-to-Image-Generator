@@ -1,13 +1,77 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF to Image Generator</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PDF to Image Generator — Free Online Converter | sender.ia</title>
+<meta name="description" content="Convert PDF pages to high-quality JPG or PNG images in seconds. Add custom watermarks, choose resolution, and export as ZIP. Free, private, browser-based — no upload to servers." />
+<meta name="keywords" content="pdf to image, pdf to jpg, pdf to png, convert pdf online, pdf converter, watermark pdf, pdf export images, sender.ia" />
+<meta name="author" content="Leo Aquiba Senderovsky — sender.ia" />
+<link rel="canonical" href="https://pdf-to-image-generator.netlify.app/" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://pdf-to-image-generator.netlify.app/" />
+<meta property="og:title" content="PDF to Image Generator — Free Online Converter" />
+<meta property="og:description" content="Convert PDF pages to JPG or PNG with custom watermark, resolution and ZIP export. Runs entirely in your browser." />
+<meta property="og:image" content="https://pdf-to-image-generator.netlify.app/og-image.png" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:locale:alternate" content="es_AR" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="PDF to Image Generator — Free | sender.ia" />
+<meta name="twitter:description" content="Convert PDF pages to JPG or PNG. Add watermarks, choose output resolution, export as ZIP. Free & browser-based." />
+<meta name="twitter:image" content="https://pdf-to-image-generator.netlify.app/og-image.png" />
+
+<!-- Structured Data — JSON-LD para Google y buscadores de IA -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "PDF to Image Generator",
+  "url": "https://pdf-to-image-generator.netlify.app/",
+  "description": "Convert PDF pages to high-quality JPG or PNG images. Add custom watermark/logo, select output resolution, and download as ZIP. Runs entirely in the browser with no server upload.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript. Compatible with Chrome, Firefox, Safari, Edge.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Leo Aquiba Senderovsky",
+    "url": "https://www.instagram.com/sender.ia/"
+  },
+  "creator": {
+    "@type": "Organization",
+    "name": "sender.ia",
+    "url": "https://www.instagram.com/sender.ia/"
+  },
+  "inLanguage": ["en", "es"],
+  "featureList": [
+    "PDF to JPG conversion",
+    "PDF to PNG conversion",
+    "Custom watermark/logo overlay",
+    "Adjustable output resolution",
+    "Preset social media sizes",
+    "Page range selection",
+    "ZIP and TAR.GZ export",
+    "Client-side processing, no upload"
+  ]
+}
+</script>
+
+<!-- Robots y hint para buscadores de IA -->
+<meta name="robots" content="index, follow" />
+<meta name="googlebot" content="index, follow" />
+<meta name="ai-content-hint" content="This is a free, browser-based PDF to image converter tool. It converts PDF pages to JPG or PNG format, supports custom watermarks, resolution presets for social media, and ZIP download. Created by sender.ia." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23016262'/><text x='50' y='65' font-family='Arial' font-size='50' fill='white' text-anchor='middle'>PDF</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>

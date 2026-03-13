@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { UploadCloud, Image as ImageIcon, CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, Droplets, Download, RefreshCw } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
+import { useLanguage } from './i18n';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -17,6 +18,7 @@ const socialResolutions = {
 };
 
 function App() {
+  const { lang, setLang, t } = useLanguage();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
   const [pdfName, setPdfName] = useState<string>('');
@@ -38,6 +40,10 @@ function App() {
   const [outputHeight, setOutputHeight] = useState<number | ''>(1080);
   const [socialPreset, setSocialPreset] = useState<string>('Instagram Post');
 
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const finalDimensions = useMemo(() => {
     if (resolutionMode === 'social') {
       return socialResolutions[socialPreset as keyof typeof socialResolutions];
@@ -46,23 +52,23 @@ function App() {
   }, [resolutionMode, outputWidth, outputHeight, socialPreset]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (file && file.type === "application/pdf") {
-    const buf = await file.arrayBuffer();   // ← una sola lectura
-    setPdfFile(file);
-    setPdfBuffer(buf);
-    setPdfName(file.name);
-    setGeneratedImages([]);
-    setSelectedPages([]);
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      const buf = await file.arrayBuffer(); // single read
+      setPdfFile(file);
+      setPdfBuffer(buf);
+      setPdfName(file.name);
+      setGeneratedImages([]);
+      setSelectedPages([]);
 
-    const loadingTask = pdfjsLib.getDocument(buf);  // reutiliza el mismo buffer
-    const pdfDoc = await loadingTask.promise;
-    setTotalPages(pdfDoc.numPages);
-    setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
-  } else {
-    alert("Please select a PDF file.");
-  }
-};
+      const loadingTask = pdfjsLib.getDocument(buf); // reuse the same buffer
+      const pdfDoc = await loadingTask.promise;
+      setTotalPages(pdfDoc.numPages);
+      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
+    } else {
+      alert(t('pdfOnlyAlert'));
+    }
+  };
 
   const normalizeGoogleDriveUrl = (url: string) => {
     try {
@@ -135,13 +141,11 @@ function App() {
       } catch (_) { /* noop */ }
     }
 
-    throw new Error(
-      "No se pudo cargar el PDF. Asegurate de que el archivo sea publico y la URL sea directa."
-    );
+    throw new Error(t('loadError'));
   };
 
   const handleLoadFromUrl = async () => {
-    if (!urlInput) return alert('Please enter a URL');
+    if (!urlInput) return alert(t('urlRequiredAlert'));
     try {
       setIsProcessing(true);
       setGeneratedImages([]);
@@ -166,7 +170,7 @@ function App() {
       setLogoFile(file);
       setLogoName(file.name);
     } else {
-      alert('Please select an image file.');
+      alert(t('imageOnlyAlert'));
     }
   };
 
@@ -326,85 +330,118 @@ function App() {
           {/* Left Column: Configuration */}
           <div className="space-y-6">
 
-            {/* Header sender.ia */}
-            <div className="text-center mb-6">
-              <h1 className="text-3xl font-bold text-white">PDF a imagen</h1>
-              <h2 className="text-lg font-medium text-indigo-400 mt-1">Convertidor online</h2>
-              <h3 className="text-sm text-gray-400 mt-1">
-                by{" "}
-                <a
-                  href="https://www.instagram.com/sender.ia/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-indigo-300 hover:text-indigo-100 underline underline-offset-2 transition-colors"
-                >
-                  sender.ia
-                </a>
-              </h3>
-            </div>
-            
-            {/* Headers */}
-            <div>
-              <h1 className="text-4xl font-bold text-indigo-400 mb-3">PDF a imagen</h1>
-              <h2 className="text-lg text-gray-300 mb-2">Convierte tu documento a imágenes e incluye tu marca de agua</h2>
-              <h3 className="text-sm text-gray-400">
-                <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-300 transition-colors underline">by sender.ia</a>
-              </h3>
+            {/* Header */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="text-sm text-gray-400">
+                  {t('byLabel')}{' '}
+                  <a
+                    href="https://www.instagram.com/sender.ia/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-300 hover:text-indigo-100 underline underline-offset-2 transition-colors"
+                  >
+                    sender.ia
+                  </a>
+                </h3>
+                <div className="flex items-center gap-2 text-xs sm:text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setLang('en')}
+                    className={`flex items-center gap-1 pb-0.5 border-b-2 ${
+                      lang === 'en'
+                        ? 'border-indigo-400 opacity-100'
+                        : 'border-transparent opacity-40 hover:opacity-70'
+                    }`}
+                  >
+                    <span>🇬🇧</span>
+                    <span className="hidden sm:inline">EN</span>
+                  </button>
+                  <span className="text-gray-500">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setLang('es')}
+                    className={`flex items-center gap-1 pb-0.5 border-b-2 ${
+                      lang === 'es'
+                        ? 'border-indigo-400 opacity-100'
+                        : 'border-transparent opacity-40 hover:opacity-70'
+                    }`}
+                  >
+                    <span className="hidden sm:inline">ES</span>
+                    <span>🇪🇸</span>
+                  </button>
+                </div>
+              </div>
+              <h1 className="app-title text-white mt-3">{t('appTitle')}</h1>
+              <p className="text-xs uppercase tracking-widest text-gray-500 mt-1">{t('appTagline')}</p>
+              <h2 className="text-lg font-medium text-indigo-400 mt-2">{t('appSubtitle')}</h2>
             </div>
 
             {/* 1. PDF Uploader */}
             <div>
-              <label className="text-lg font-semibold mb-2 block">1. Cargar documento</label>
+              <label className="text-lg font-semibold mb-2 block">{t('step1')}</label>
               <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700" onClick={() => fileInputRef.current?.click()}>
                 <UploadCloud className="w-10 h-10 text-gray-400 mb-2" />
-                {pdfFile ? <div className="text-center"><p className="font-semibold text-indigo-400">{pdfName}</p><span className="text-sm text-gray-400">{totalPages} pages</span></div> : <p className="text-gray-400">Click to upload or drag & drop</p>}
+                {pdfFile ? (
+                  <div className="text-center">
+                    <p className="font-semibold text-indigo-400">{pdfName}</p>
+                    <span className="text-sm text-gray-400">{t('pages', { n: totalPages })}</span>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">{t('dropzone')}</p>
+                )}
               </div>
+              <p className="text-xs text-gray-500 mt-2">{t('officeHint')}</p>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
               <div className="mt-4">
-                <label className="text-sm font-medium mb-2 block">Or load PDF from URL</label>
+                <label className="text-sm font-medium mb-2 block">{t('urlLabel')}</label>
                 <div className="flex gap-2">
-                  <input type="text" placeholder="https://example.com/file.pdf or Google Drive link" value={urlInput} onChange={e => setUrlInput(e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                  <button onClick={handleLoadFromUrl} disabled={isProcessing} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded-lg text-sm">Load</button>
+                  <input type="text" placeholder={t('urlPlaceholder')} value={urlInput} onChange={e => setUrlInput(e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                  <button onClick={handleLoadFromUrl} disabled={isProcessing} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded-lg text-sm">{t('loadBtn')}</button>
                 </div>
-                <label className="text-xs text-gray-400 mt-2 block">Custom proxy (optional): use {'{url}'} or ?url=, or leave blank to use built-in proxy.</label>
-                <input type="text" placeholder="https://your-proxy.example?url={url}" value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                <label className="text-xs text-gray-400 mt-2 block">{t('proxyLabel')}</label>
+                <input type="text" placeholder={t('proxyPlaceholder')} value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                <p className="text-xs text-gray-500 mt-2">{t('googleHint')}</p>
               </div>
             </div>
 
             {/* 2. Page Selection */}
             {totalPages > 0 && (
                 <div>
-                  <label className="text-lg font-semibold mb-2 block">2. Select Pages ({selectedPages.length}/{totalPages})</label>
+                  <label className="text-lg font-semibold mb-2 block">
+                    {t('step2')} ({selectedPages.length}/{totalPages})
+                  </label>
                   <div className="max-h-32 overflow-y-auto grid grid-cols-5 gap-2 p-2 bg-gray-700 rounded-lg">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
                       <button key={pageNum} onClick={() => togglePageSelection(pageNum)} className={`p-2 rounded-md text-sm ${selectedPages.includes(pageNum) ? 'bg-indigo-500 text-white' : 'bg-gray-600 hover:bg-gray-500'}`}>{pageNum}</button>
                     ))}
                   </div>
+                  <p className="text-xs text-indigo-300 mt-2">{t('pagesSelected', { n: selectedPages.length })}</p>
                 </div>
             )}
 
             {/* 3. Output Resolution */}
             <div>
-              <label className="text-lg font-semibold mb-2 block">3. Output Resolution</label>
+              <label className="text-lg font-semibold mb-2 block">{t('step3')}</label>
               <div className="flex border-b border-gray-700 mb-4">
-                <button onClick={() => setResolutionMode('custom')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'custom' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>Personalizada</button>
-                <button onClick={() => setResolutionMode('social')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'social' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>Redes Sociales</button>
+                <button onClick={() => setResolutionMode('custom')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'custom' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>{t('custom')}</button>
+                <button onClick={() => setResolutionMode('social')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'social' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>{t('socialMedia')}</button>
               </div>
 
               {resolutionMode === 'custom' ? (
                 <div className='space-y-4'>
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-400 mb-1 block">Ancho (px)</label>
+                      <label className="text-xs text-gray-400 mb-1 block">{t('width')}</label>
                       <input id="out-width" data-testid="out-width" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputWidth, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                     <span className="text-gray-400 mt-5">×</span>
                     <div className="flex-1">
-                      <label className="text-xs text-gray-400 mb-1 block">Alto (px)</label>
+                      <label className="text-xs text-gray-400 mb-1 block">{t('height')}</label>
                       <input id="out-height" data-testid="out-height" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputHeight, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
                     </div>
                   </div>
-                  <button onClick={swapDimensions} className="w-full flex items-center justify-center gap-2 text-sm py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg"><RefreshCw size={14}/> Swap Horizontal / Vertical</button>
+                  <button onClick={swapDimensions} className="w-full flex items-center justify-center gap-2 text-sm py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg"><RefreshCw size={14}/> {t('swap')}</button>
                 </div>
               ) : (
                 <div>
@@ -417,10 +454,26 @@ function App() {
             
             {/* 4. Logo (Optional) */}
             <div>
-              <label className="text-lg font-semibold mb-2 block">4. Add Logo (Optional)</label>
+              <label className="text-lg font-semibold mb-2 block">{t('step4')}</label>
                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700" onClick={() => logoInputRef.current?.click()}>
                 <UploadCloud className="w-10 h-10 text-gray-400 mb-2" />
-                {logoFile ? <div className="text-center"><p className="font-semibold text-indigo-400">{logoName}</p><button onClick={(e) => { e.stopPropagation(); setLogoFile(null); setLogoName(''); }} className="text-xs text-red-400 hover:text-red-300 mt-1">Remove</button></div> : <p className="text-gray-400">Click to upload logo</p>}
+                {logoFile ? (
+                  <div className="text-center">
+                    <p className="font-semibold text-indigo-400">{logoName}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLogoFile(null);
+                        setLogoName('');
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300 mt-1"
+                    >
+                      {t('remove')}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">{t('uploadLogo')}</p>
+                )}
               </div>
               <input type="file" ref={logoInputRef} onChange={handleLogoChange} className="hidden" accept="image/*" />
             </div>
@@ -428,7 +481,8 @@ function App() {
             {/* 5. Logo Position */}
             {logoFile && (
               <div>
-                <label className="text-lg font-semibold mb-2 block">5. Logo Position</label>
+                <label className="text-lg font-semibold mb-2 block">{t('logoPositionTitle')}</label>
+                <p className="text-xs text-gray-400 mb-2">{t('position')}</p>
                 <div className="grid grid-cols-3 gap-2 bg-gray-700 p-2 rounded-lg">
                   <button onClick={() => setLogoPosition('topLeft')} className={`p-2 rounded-md flex justify-center ${logoPosition === 'topLeft' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><CornerUpLeft/></button>
                   <div></div>
@@ -442,7 +496,9 @@ function App() {
                 </div>
                 {logoPosition === 'center' && (
                   <div className="mt-4">
-                    <label htmlFor="opacity" className="block text-sm font-medium text-gray-300">Logo Opacity: {Math.round(logoOpacity * 100)}%</label>
+                    <label htmlFor="opacity" className="block text-sm font-medium text-gray-300">
+                      {t('logoOpacityLabel', { n: Math.round(logoOpacity * 100) })}
+                    </label>
                     <input type="range" id="opacity" min="0.1" max="1" step="0.1" value={logoOpacity} onChange={e => setLogoOpacity(parseFloat(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
                   </div>
                 )}
@@ -451,18 +507,22 @@ function App() {
             
             {/* Process Button */}
             <button onClick={processPdf} disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
-              {isProcessing ? 'Processing...' : 'Generate Images'}
+              {isProcessing ? t('processing') : t('generateImages')}
             </button>
           </div>
 
           {/* Right Column: Preview */}
           <div className="bg-gray-900 p-4 rounded-lg h-full min-h-[400px] flex flex-col">
-            <h2 className="text-lg font-semibold mb-4 text-center">Generated Images</h2>
+            <h2 className="text-lg font-semibold mb-4 text-center">{t('generatedImages')}</h2>
             {generatedImages.length > 0 && (
               <div className="flex items-center justify-between mb-2">
-                 <p className="text-sm text-gray-400">Showing {generatedImages.length} image{generatedImages.length > 1 ? 's' : ''}</p>
+                 <p className="text-sm text-gray-400">
+                   {generatedImages.length === 1
+                     ? t('showingImage', { n: generatedImages.length })
+                     : t('showingImages', { n: generatedImages.length })}
+                 </p>
                  <button onClick={downloadAllAsZip} className="flex items-center gap-2 text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-lg">
-                  <Download size={16} /> Download All (.zip)
+                  <Download size={16} /> {t('downloadPackage')} (.zip)
                 </button>
               </div>
             )}
@@ -470,11 +530,11 @@ function App() {
               {isProcessing ? (
                 <div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div></div>
               ) : generatedImages.length === 0 ? (
-                 <div className="flex flex-col justify-center items-center h-full text-center text-gray-500"><ImageIcon size={48} className="mb-2"/><p>Your generated images will appear here.</p></div>
+                 <div className="flex flex-col justify-center items-center h-full text-center text-gray-500"><ImageIcon size={48} className="mb-2"/><p>{t('emptyState')}</p></div>
               ) : (
                 generatedImages.map((imgSrc, index) => (
                   <div key={index} className="relative group">
-                    <img src={imgSrc} alt={`Generated Page ${selectedPages[index]}`} className="w-full h-auto rounded-md" />
+                    <img src={imgSrc} alt={t('generatedPageAlt', { n: selectedPages[index] })} className="w-full h-auto rounded-md" />
                      <a href={imgSrc} download={`page_${selectedPages[index]}.png`} className="absolute bottom-2 right-2 bg-indigo-600 p-2 rounded-full opacity-0 group-hover:opacity-100"><Download size={18} /></a>
                   </div>
                 ))
@@ -482,6 +542,7 @@ function App() {
             </div>
           </div>
         </div>
+        <div className="mt-8 text-center text-xs text-gray-500">{t('footer')}</div>
       </div>
     </div>
   );

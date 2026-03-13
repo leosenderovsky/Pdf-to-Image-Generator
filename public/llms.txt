@@ -1,0 +1,21 @@
+# PDF to Image Generator — sender.ia
+
+## What this app does
+PDF to Image Generator is a free, browser-based tool that converts PDF pages into
+high-quality JPG or PNG images. All processing happens client-side (no server upload).
+
+## Key features
+- Convert any PDF page or range to JPG or PNG
+- Custom logo/watermark overlay with position, size, opacity, and drop shadow controls
+- Output resolution: custom (px) or social media presets (1080x1080, 1920x1080, etc.)
+- Download as individual files or ZIP/TAR.GZ package
+- Supports public URLs and Google Drive public links
+- Available in English and Spanish
+
+## Author
+Leo Aquiba Senderovsky — sender.ia
+https://www.instagram.com/sender.ia/
+https://pdf-to-image-generator.netlify.app/
+
+## License
+Free to use. No account required.
