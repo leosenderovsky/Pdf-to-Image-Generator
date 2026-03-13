@@ -262,7 +262,7 @@ function App() {
     }
 
     const isGdocs = rawUrl.includes('docs.google.com');
-    setShowGdriveWarning(isGdrive);
+    setShowGdriveWarning(false);
     setShowGdocsWarning(isGdocs);
 
     let lastError: unknown = null;
@@ -284,6 +284,7 @@ function App() {
         const name = guessed.includes('?') ? guessed.split('?')[0] : guessed;
         await setupPdf(pdf, name.replace('.pdf', ''));
         await renderPage(pdf, 1);
+        setShowGdriveWarning(false);
         setIsLoading(false);
         setIsLoadingUrl(false);
         return;
@@ -296,6 +297,9 @@ function App() {
 
     // eslint-disable-next-line no-console
     console.error('Todos los proxies fallaron:', lastError);
+    if (isGdrive) {
+      setShowGdriveWarning(true);
+    }
     setLoadError(
       lang === 'es'
         ? 'No se pudo cargar el PDF desde la URL. Verificá que el archivo sea público y accesible.'
