@@ -1,73 +1,140 @@
-
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { UploadCloud, Image as ImageIcon, CornerUpLeft, CornerUpRight, CornerDownLeft, CornerDownRight, Droplets, Download, RefreshCw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
+import pako from 'pako';
 import { useLanguage } from './i18n';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-type LogoPosition = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | 'center';
-type ResolutionMode = 'custom' | 'social';
+type LogoMode = 'corner' | 'center';
+type LogoCornerPos = 'tl' | 'tr' | 'bl' | 'br';
+type ResolutionTab = 'custom' | 'social';
+type PageSelectionMode = 'all' | 'custom';
 
-const socialResolutions = {
-  'Instagram Post': { width: 1080, height: 1080 },
-  'Instagram Story': { width: 1080, height: 1920 },
-  'Facebook Post': { width: 1200, height: 630 },
-  'Twitter Post': { width: 1600, height: 900 },
+type SocialFormat = {
+  net: string;
+  nameKey: string;
+  w: number;
+  h: number;
 };
+
+const socialFormats: SocialFormat[] = [
+  { net: 'IG', nameKey: 'igFeedSquare', w: 1080, h: 1080 },
+  { net: 'IG', nameKey: 'igFeedHoriz', w: 1080, h: 566 },
+  { net: 'IG', nameKey: 'igFeedVert', w: 1080, h: 1350 },
+  { net: 'IG', nameKey: 'igStoryReels', w: 1080, h: 1920 },
+  { net: 'IG', nameKey: 'igProfile', w: 320, h: 320 },
+  { net: 'FB', nameKey: 'fbPostSquare', w: 1080, h: 1080 },
+  { net: 'FB', nameKey: 'fbPostHoriz', w: 1200, h: 630 },
+  { net: 'FB', nameKey: 'fbStory', w: 1080, h: 1920 },
+  { net: 'FB', nameKey: 'fbCover', w: 820, h: 312 },
+  { net: 'X', nameKey: 'xImagePost', w: 1200, h: 675 },
+  { net: 'X', nameKey: 'xHeader', w: 1500, h: 500 },
+  { net: 'IN', nameKey: 'inImagePost', w: 1200, h: 627 },
+  { net: 'IN', nameKey: 'inStory', w: 1080, h: 1920 },
+  { net: 'IN', nameKey: 'inBanner', w: 1584, h: 396 },
+  { net: 'TK', nameKey: 'tkVideoCover', w: 1080, h: 1920 },
+  { net: 'YT', nameKey: 'ytThumbnail', w: 1280, h: 720 },
+  { net: 'YT', nameKey: 'ytChannelArt', w: 2560, h: 1440 },
+  { net: 'PI', nameKey: 'piPinStandard', w: 1000, h: 1500 },
+  { net: 'PI', nameKey: 'piPinSquare', w: 1000, h: 1000 },
+  { net: 'WA', nameKey: 'waStatus', w: 1080, h: 1920 }
+];
 
 function App() {
   const { lang, setLang, t } = useLanguage();
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
-  const [pdfName, setPdfName] = useState<string>('');
-  const [urlInput, setUrlInput] = useState<string>('');
-  const [proxyUrl, setProxyUrl] = useState<string>('');
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoName, setLogoName] = useState<string>('');
-  const [logoPosition, setLogoPosition] = useState<LogoPosition>('topRight');
-  const [logoOpacity, setLogoOpacity] = useState(0.5);
+
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState(0);
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
-  const [totalPages, setTotalPages] = useState(0);
-  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentPagePreview, setCurrentPagePreview] = useState(1);
+  const [fileName, setFileName] = useState('documento');
+  const [thumbnails, setThumbnails] = useState<{ page: number; url: string }[]>([]);
+
+  const [pageSelectionMode, setPageSelectionMode] = useState<PageSelectionMode>('all');
+  const [customPagesInput, setCustomPagesInput] = useState('');
+
+  const [resolutionTab, setResolutionTab] = useState<ResolutionTab>('custom');
+  const [outputWidth, setOutputWidth] = useState('1080');
+  const [outputHeight, setOutputHeight] = useState('1080');
+  const [socialIndex, setSocialIndex] = useState<number | null>(null);
+
+  const [logoActive, setLogoActive] = useState(false);
+  const [logoMode, setLogoMode] = useState<LogoMode>('corner');
+  const [logoCornerPos, setLogoCornerPos] = useState<LogoCornerPos>('tl');
+  const [logoSizeCorner, setLogoSizeCorner] = useState(15);
+  const [logoMargin, setLogoMargin] = useState(40);
+  const [logoShadow, setLogoShadow] = useState(false);
+  const [logoSizeCenter, setLogoSizeCenter] = useState(50);
+  const [logoOpacity, setLogoOpacity] = useState(30);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string>('');
+
+  const [urlInput, setUrlInput] = useState('');
+  const [showGdocsWarning, setShowGdocsWarning] = useState(false);
+  const [showGdriveWarning, setShowGdriveWarning] = useState(false);
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+
+  const [dragOver, setDragOver] = useState(false);
+
+  const [logMessage, setLogMessage] = useState('');
+  const logTimerRef = useRef<number | null>(null);
+
+  const [progress, setProgress] = useState<number | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [resolutionMode, setResolutionMode] = useState<ResolutionMode>('custom');
-  const [outputWidth, setOutputWidth] = useState<number | ''>(1080);
-  const [outputHeight, setOutputHeight] = useState<number | ''>(1080);
-  const [socialPreset, setSocialPreset] = useState<string>('Instagram Post');
+  const pageBackgroundColorsRef = useRef<Record<number, string>>({});
 
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const finalDimensions = useMemo(() => {
-    if (resolutionMode === 'social') {
-      return socialResolutions[socialPreset as keyof typeof socialResolutions];
+  useEffect(() => {
+    if (pdfDoc) {
+      updatePageSelection();
     }
-    return { width: outputWidth, height: outputHeight };
-  }, [resolutionMode, outputWidth, outputHeight, socialPreset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSelectionMode, customPagesInput, pdfDoc]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      const buf = await file.arrayBuffer(); // single read
-      setPdfFile(file);
-      setPdfBuffer(buf);
-      setPdfName(file.name);
-      setGeneratedImages([]);
-      setSelectedPages([]);
-
-      const loadingTask = pdfjsLib.getDocument(buf); // reuse the same buffer
-      const pdfDoc = await loadingTask.promise;
-      setTotalPages(pdfDoc.numPages);
-      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
-    } else {
-      alert(t('pdfOnlyAlert'));
+  useEffect(() => {
+    if (selectedPages.length > 0 && !selectedPages.includes(currentPagePreview)) {
+      setCurrentPagePreview(selectedPages[0]);
     }
+  }, [selectedPages, currentPagePreview]);
+
+  useEffect(() => {
+    updatePreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    outputWidth,
+    outputHeight,
+    pdfDoc,
+    currentPagePreview,
+    logoActive,
+    logoMode,
+    logoCornerPos,
+    logoSizeCorner,
+    logoMargin,
+    logoShadow,
+    logoSizeCenter,
+    logoOpacity
+  ]);
+
+  useEffect(() => {
+    updatePreviewInfo();
+  }, [outputWidth, outputHeight]);
+
+  const showLog = (msg: string) => {
+    setLogMessage(msg);
+    if (logTimerRef.current) {
+      window.clearTimeout(logTimerRef.current);
+    }
+    logTimerRef.current = window.setTimeout(() => {
+      setLogMessage('');
+    }, 3000);
   };
 
   const normalizeGoogleDriveUrl = (url: string) => {
@@ -86,463 +153,816 @@ function App() {
     return url;
   };
 
-  const buildProxyUrl = (proxyBase: string, targetUrl: string) => {
-    const trimmed = proxyBase.trim();
-    if (!trimmed) return '';
-    if (trimmed.includes('{url}')) {
-      return trimmed.replace('{url}', encodeURIComponent(targetUrl));
-    }
-    try {
-      const resolved = new URL(trimmed, window.location.origin);
-      resolved.searchParams.set('url', targetUrl);
-      return resolved.toString();
-    } catch (_) {
-      const joiner = trimmed.includes('?') ? '&' : '?';
-      return `${trimmed}${joiner}url=${encodeURIComponent(targetUrl)}`;
-    }
-  };
+  const loadPdfBufferFromUrl = async (url: string) => {
+    let currentUrl = url;
+    setShowGdocsWarning(false);
+    setShowGdriveWarning(false);
 
-  const fetchPdfBufferFromUrl = async (url: string): Promise<ArrayBuffer> => {
-    const proxyCandidates: string[] = [];
-    const trimmedProxy = proxyUrl.trim();
-    if (trimmedProxy) {
-      const built = buildProxyUrl(trimmedProxy, url);
-      if (built) proxyCandidates.push(built);
-    }
-
-    // Default Netlify proxy (server-side fetch, avoids CORS)
-    proxyCandidates.push(`/api/fetch-pdf?url=${encodeURIComponent(url)}`);
-    // Legacy fallback
-    proxyCandidates.push(`/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`);
-
-    for (const proxyEndpoint of proxyCandidates) {
-      try {
-        const res = await fetch(proxyEndpoint);
-        if (!res.ok) throw new Error(`Proxy error: ${res.status} ${res.statusText}`);
-        return await res.arrayBuffer();
-      } catch (proxyErr) {
-        console.warn("Proxy fetch failed, trying next...", proxyErr);
+    if (currentUrl.includes('docs.google.com') && currentUrl.includes('/edit')) {
+      currentUrl = currentUrl.replace(/\/edit.*$/, '/export?format=pdf');
+      setShowGdocsWarning(true);
+      setUrlInput(currentUrl);
+    } else {
+      const driveRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
+      const driveMatch = currentUrl.match(driveRegex);
+      if (driveMatch) {
+        const fileId = driveMatch[1];
+        currentUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+        setShowGdriveWarning(true);
+        setUrlInput(currentUrl);
       }
     }
 
-    // Fallback: direct fetch (only works if the server allows CORS)
-    const normalized = normalizeGoogleDriveUrl(url);
-    try {
-      const res = await fetch(normalized, { mode: "cors", redirect: "follow" });
-      if (!res.ok) throw new Error(`Direct fetch failed: ${res.status} ${res.statusText}`);
-      return await res.arrayBuffer();
-    } catch (_) { /* noop */ }
+    const proxyCandidates = [
+      `/api/fetch-pdf?url=${encodeURIComponent(currentUrl)}`,
+      `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(currentUrl)}`
+    ];
 
-    if (normalized !== url) {
+    for (const endpoint of proxyCandidates) {
       try {
-        const res = await fetch(url, { mode: "cors", redirect: "follow" });
-        if (!res.ok) throw new Error(`Direct fetch (original URL) failed: ${res.status}`);
+        const res = await fetch(endpoint);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return await res.arrayBuffer();
-      } catch (_) { /* noop */ }
+      } catch (err) {
+        // try next
+      }
     }
 
-    throw new Error(t('loadError'));
+    const normalized = normalizeGoogleDriveUrl(currentUrl);
+    try {
+      const res = await fetch(normalized, { mode: 'cors', redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.arrayBuffer();
+    } catch (err) {
+      // fallback to original url if normalized differs
+    }
+
+    if (normalized !== currentUrl) {
+      const res = await fetch(currentUrl, { mode: 'cors', redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.arrayBuffer();
+    }
+
+    throw new Error('Failed to load PDF');
+  };
+
+  const setupPdf = async (doc: pdfjsLib.PDFDocumentProxy, name: string) => {
+    setPdfDoc(doc);
+    setNumPages(doc.numPages);
+    setFileName(name);
+    setCurrentPagePreview(1);
+    pageBackgroundColorsRef.current = {};
+    setSelectedPages(Array.from({ length: doc.numPages }, (_, i) => i + 1));
+    showLog(t('logDocLoaded'));
+    await generateThumbnails(doc, doc.numPages);
+    showLog(t('logThumbsReady'));
+  };
+
+  const generateThumbnails = async (doc: pdfjsLib.PDFDocumentProxy, total: number) => {
+    const thumbs: { page: number; url: string }[] = [];
+    for (let i = 1; i <= total; i++) {
+      if (i % 5 === 0) await new Promise(r => setTimeout(r, 1));
+      const page = await doc.getPage(i);
+      const viewport = page.getViewport({ scale: 0.15 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx!, viewport, background: 'transparent' }).promise;
+      thumbs.push({ page: i, url: canvas.toDataURL('image/jpeg', 0.5) });
+    }
+    setThumbnails(thumbs);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'pdf') {
+      alert(t('pdfOnlyAlert'));
+      return;
+    }
+    const buf = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: buf });
+    const doc = await loadingTask.promise;
+    const name = file.name.replace('.pdf', '');
+    await setupPdf(doc, name);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'pdf') {
+      alert(t('pdfOnlyAlert'));
+      return;
+    }
+    const buf = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: buf });
+    const doc = await loadingTask.promise;
+    const name = file.name.replace('.pdf', '');
+    await setupPdf(doc, name);
   };
 
   const handleLoadFromUrl = async () => {
-    if (!urlInput) return alert(t('urlRequiredAlert'));
+    if (!urlInput.trim()) return;
+    setIsLoadingUrl(true);
+    showLog(t('logLoadingUrl'));
     try {
-      setIsProcessing(true);
-      setGeneratedImages([]);
-      const buffer = await fetchPdfBufferFromUrl(urlInput.trim());
-      setPdfBuffer(buffer);
-      setPdfFile(null);
-      setPdfName(urlInput.split('/').pop() || 'remote.pdf');
-      const loadingTask = pdfjsLib.getDocument(buffer);
-      const pdfDoc = await loadingTask.promise;
-      setTotalPages(pdfDoc.numPages);
-      setSelectedPages(Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1));
+      const buffer = await loadPdfBufferFromUrl(urlInput.trim());
+      const loadingTask = pdfjsLib.getDocument({ data: buffer });
+      const doc = await loadingTask.promise;
+      const guessed = urlInput.split('/').pop() || 'documento';
+      const name = guessed.includes('?') ? guessed.split('?')[0] : guessed;
+      await setupPdf(doc, name.replace('.pdf', ''));
     } catch (err: any) {
-      alert(err.message || String(err));
+      const msg = err?.message || String(err);
+      alert(t('loadError', { message: msg }));
     } finally {
-      setIsProcessing(false);
+      setIsLoadingUrl(false);
     }
+  };
+
+  const parsePageRanges = (str: string, max: number) => {
+    if (!str.trim()) return [] as number[];
+    const pages = new Set<number>();
+    const parts = str.split(',');
+    for (let part of parts) {
+      part = part.trim();
+      if (part.includes('-')) {
+        const [start, end] = part.split('-').map(Number);
+        if (start && end && start <= end) {
+          for (let i = start; i <= end; i++) {
+            if (i >= 1 && i <= max) pages.add(i);
+          }
+        }
+      } else {
+        const p = Number(part);
+        if (p >= 1 && p <= max) pages.add(p);
+      }
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+  };
+
+  const updatePageSelection = () => {
+    if (!pdfDoc) return;
+    if (pageSelectionMode === 'all') {
+      setSelectedPages(Array.from({ length: numPages }, (_, i) => i + 1));
+    } else {
+      setSelectedPages(parsePageRanges(customPagesInput, numPages));
+    }
+  };
+  const updatePreviewInfo = () => {
+    const w = outputWidth || '0';
+    const h = outputHeight || '0';
+    const el = document.getElementById('preview-info');
+    if (el) el.textContent = `${w} × ${h} px`;
+  };
+
+  const detectBackgroundColor = async (tempCanvas: HTMLCanvasElement) => {
+    try {
+      const ctx = tempCanvas.getContext('2d');
+      const w = tempCanvas.width;
+      const h = tempCanvas.height;
+      const imgData = ctx!.getImageData(0, 0, w, h).data;
+
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+
+      const sampleArea = (startX: number, startY: number) => {
+        for (let y = startY; y < startY + 3; y++) {
+          for (let x = startX; x < startX + 3; x++) {
+            if (x >= 0 && x < w && y >= 0 && y < h) {
+              const i = (y * w + x) * 4;
+              if (imgData[i + 3] > 0) {
+                rSum += imgData[i];
+                gSum += imgData[i + 1];
+                bSum += imgData[i + 2];
+                count++;
+              }
+            }
+          }
+        }
+      };
+
+      sampleArea(0, 0);
+      sampleArea(w - 3, 0);
+      sampleArea(0, h - 3);
+      sampleArea(w - 3, h - 3);
+
+      sampleArea(Math.floor(w / 2) - 1, 0);
+      sampleArea(Math.floor(w / 2) - 1, h - 3);
+      sampleArea(0, Math.floor(h / 2) - 1);
+      sampleArea(w - 3, Math.floor(h / 2) - 1);
+
+      if (count === 0) return '#ffffff';
+
+      const r = Math.round(rSum / count);
+      const g = Math.round(gSum / count);
+      const b = Math.round(bSum / count);
+
+      return `rgb(${r}, ${g}, ${b})`;
+    } catch (e) {
+      return '#ffffff';
+    }
+  };
+
+  const renderPageToCanvas = async (
+    page: pdfjsLib.PDFPageProxy,
+    outW: number,
+    outH: number,
+    targetCanvas?: HTMLCanvasElement | null
+  ) => {
+    const pageNumber = page.pageNumber;
+    let bgColor = pageBackgroundColorsRef.current[pageNumber];
+
+    const viewportOriginal = page.getViewport({ scale: 1 });
+
+    if (!bgColor) {
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = viewportOriginal.width;
+      tempCanvas.height = viewportOriginal.height;
+      await page.render({ canvasContext: tempCtx!, viewport: viewportOriginal, background: 'transparent' }).promise;
+      bgColor = await detectBackgroundColor(tempCanvas);
+      pageBackgroundColorsRef.current[pageNumber] = bgColor;
+    }
+
+    const scaleX = outW / viewportOriginal.width;
+    const scaleY = outH / viewportOriginal.height;
+    const scale = Math.min(scaleX, scaleY);
+
+    const viewport = page.getViewport({ scale });
+
+    const canvas = targetCanvas || document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = outW;
+    canvas.height = outH;
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, outW, outH);
+
+    const offsetX = (outW - viewport.width) / 2;
+    const offsetY = (outH - viewport.height) / 2;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    await page.render({ canvasContext: ctx, viewport, background: 'transparent' }).promise;
+    ctx.restore();
+
+    if (logoActive && logoImgRef.current) {
+      composeLogo(ctx, outW, outH);
+    }
+
+    return canvas;
+  };
+
+  const composeLogo = (ctx: CanvasRenderingContext2D, outW: number, outH: number) => {
+    const img = logoImgRef.current;
+    if (!img) return;
+    const imgRatio = img.height / img.width;
+
+    ctx.save();
+
+    if (logoMode === 'corner') {
+      const logoW = outW * (logoSizeCorner / 100);
+      const logoH = logoW * imgRatio;
+      const m = logoMargin;
+
+      let x = 0, y = 0;
+      if (logoCornerPos === 'tl') { x = m; y = m; }
+      else if (logoCornerPos === 'tr') { x = outW - logoW - m; y = m; }
+      else if (logoCornerPos === 'bl') { x = m; y = outH - logoH - m; }
+      else if (logoCornerPos === 'br') { x = outW - logoW - m; y = outH - logoH - m; }
+
+      if (logoShadow) {
+        ctx.filter = 'drop-shadow(4px 4px 12px rgba(0,0,0,0.6))';
+      }
+      ctx.drawImage(img, x, y, logoW, logoH);
+    } else {
+      const logoW = outW * (logoSizeCenter / 100);
+      const logoH = logoW * imgRatio;
+      const x = (outW - logoW) / 2;
+      const y = (outH - logoH) / 2;
+      ctx.globalAlpha = logoOpacity / 100;
+      ctx.drawImage(img, x, y, logoW, logoH);
+    }
+
+    ctx.restore();
+  };
+
+  const updatePreview = async () => {
+    if (!pdfDoc) return;
+    const outW = Math.max(1, Math.min(8000, Math.round(Number(outputWidth) || 1080)));
+    const outH = Math.max(1, Math.min(8000, Math.round(Number(outputHeight) || 1080)));
+    const page = await pdfDoc.getPage(currentPagePreview || 1);
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    await renderPageToCanvas(page, outW, outH, canvas);
   };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setLogoFile(file);
-      setLogoName(file.name);
-    } else {
-      alert(t('imageOnlyAlert'));
-    }
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        logoImgRef.current = img;
+        setLogoPreviewUrl(String(ev.target?.result || ''));
+        updatePreview();
+      };
+      img.src = String(ev.target?.result || '');
+    };
+    reader.readAsDataURL(file);
   };
 
-  const togglePageSelection = (pageNumber: number) => {
-    setSelectedPages(prev =>
-      prev.includes(pageNumber)
-        ? prev.filter(p => p !== pageNumber)
-        : [...prev, pageNumber]
-    );
-  };
-  
-  const processPdf = async () => {
-    if (!pdfFile && !pdfBuffer) return;
-
-    setIsProcessing(true);
-    setGeneratedImages([]);
-
-    let parsedWidth = Number(finalDimensions.width);
-    if (!Number.isFinite(parsedWidth) || parsedWidth < 1) parsedWidth = 1080;
-    let parsedHeight = Number(finalDimensions.height);
-    if (!Number.isFinite(parsedHeight) || parsedHeight < 1) parsedHeight = 1080;
-
-    const safeWidth = Math.max(1, Math.min(8000, Math.round(parsedWidth)));
-    const safeHeight = Math.max(1, Math.min(8000, Math.round(parsedHeight)));
-
-    const pdfArrayBuffer = pdfBuffer ? pdfBuffer : await pdfFile!.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument(pdfArrayBuffer);
-    const pdfDoc = await loadingTask.promise;
-    const images: string[] = [];
-
-    let logoImage: HTMLImageElement | null = null;
-    if (logoFile) {
-        logoImage = new Image();
-        logoImage.src = URL.createObjectURL(logoFile);
-        await new Promise(resolve => logoImage!.onload = resolve);
-    }
-
-    for (const pageNum of selectedPages) {
-        const page = await pdfDoc.getPage(pageNum);
-        const nativeViewport = page.getViewport({ scale: 1 });
-        const scale = Math.min(safeWidth / nativeViewport.width, safeHeight / nativeViewport.height);
-        const viewport = page.getViewport({ scale });
-
-        const canvas = document.createElement('canvas');
-        canvas.width = safeWidth;
-        canvas.height = safeHeight;
-        const context = canvas.getContext('2d');
-
-        if (context) {
-            context.fillStyle = 'white';
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            
-            const offsetX = (safeWidth - viewport.width) / 2;
-            const offsetY = (safeHeight - viewport.height) / 2;
-
-            context.save();
-            context.translate(offsetX, offsetY);
-            await page.render({
-              canvasContext: context,
-              viewport: viewport,
-              canvas: canvas
-            }).promise;
-            context.restore();
-
-            if (logoImage) {
-                const maxWidth = canvas.width * 0.15;
-                const scale = maxWidth / logoImage.width;
-                const logoWidth = logoImage.width * scale;
-                const logoHeight = logoImage.height * scale;
-                let x = 0, y = 0;
-                const margin = 10;
-                switch(logoPosition) {
-                    case 'topLeft': x = margin; y = margin; break;
-                    case 'topRight': x = canvas.width - logoWidth - margin; y = margin; break;
-                    case 'bottomLeft': x = margin; y = canvas.height - logoHeight - margin; break;
-                    case 'bottomRight': x = canvas.width - logoWidth - margin; y = canvas.height - logoHeight - margin; break;
-                    case 'center': x = (canvas.width - logoWidth) / 2; y = (canvas.height - logoHeight) / 2; break;
-                }
-                context.globalAlpha = logoPosition === 'center' ? logoOpacity : 1;
-                context.drawImage(logoImage, x, y, logoWidth, logoHeight);
-                context.globalAlpha = 1;
-            }
-            images.push(canvas.toDataURL('image/png'));
-        }
-    }
-    setGeneratedImages(images);
-    setIsProcessing(false);
-  };
-  
-  const downloadAllAsZip = async () => {
-    const zip = new JSZip();
-    generatedImages.forEach((imgData, index) => {
-        const pageNum = selectedPages[index];
-        zip.file(`page_${pageNum}.png`, imgData.split(',')[1], { base64: true });
-    });
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(zipBlob);
-    link.download = `${pdfName.replace('.pdf', '')}_images.zip`;
-    link.click();
+  const handleSwapDimensions = () => {
+    setOutputWidth(outputHeight);
+    setOutputHeight(outputWidth);
   };
 
-  const handleDimensionChange = (value: string, setter: React.Dispatch<React.SetStateAction<number | ''>>) => {
-    const raw = String(value || '').trim();
-    // If user typed or pasted a minus sign, treat as empty (block negatives)
-    if (raw.includes('-')) {
-      setter('');
-      return;
-    }
-    const sanitizedValue = raw.replace(/[^0-9]/g, '');
-    if (sanitizedValue === '') {
-      setter('');
-    } else {
-      const num = parseInt(sanitizedValue, 10);
-      setter(num);
-    }
-  };
-
-  const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Prevent characters that lead to negative/exponential/decimal input in number fields
+  const handleDimensionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-' || e.key === '.') {
       e.preventDefault();
     }
   };
 
-  const handlePasteNumeric = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handleDimensionPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pasted = e.clipboardData.getData('text') || '';
-    // Block paste that would introduce a negative value
-    if (pasted.includes('-')) {
-      e.preventDefault();
-    }
+    if (pasted.includes('-')) e.preventDefault();
   };
 
-  const handleDimensionBlur = (value: number | string | '', setter: React.Dispatch<React.SetStateAction<number | ''>>, defaultValue: number) => {
+  const handleDimensionChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
+    const raw = String(value || '').trim();
+    if (raw.includes('-')) {
+      setter('');
+      return;
+    }
+    setter(raw.replace(/[^0-9]/g, ''));
+  };
+
+  const handleDimensionBlur = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
     const num = Number(value);
-    if (isNaN(num) || num < 1) {
-      setter(defaultValue);
-    } else if (num > 8000) {
-      setter(8000);
+    if (!Number.isFinite(num) || num < 1) setter('1080');
+    else if (num > 8000) setter('8000');
+    else setter(String(Math.round(num)));
+  };
+
+  const handleSelectSocial = (idx: number) => {
+    setSocialIndex(idx);
+    const fmt = socialFormats[idx];
+    setOutputWidth(String(fmt.w));
+    setOutputHeight(String(fmt.h));
+  };
+
+  const downloadDataUrl = (dataUrl: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const exportSinglePage = async (pageNum: number, format: 'jpeg' | 'png') => {
+    if (!pdfDoc) return;
+    const outW = Math.max(1, Math.min(8000, Math.round(Number(outputWidth) || 1080)));
+    const outH = Math.max(1, Math.min(8000, Math.round(Number(outputHeight) || 1080)));
+    const quality = Number(document.getElementById('export-quality')?.getAttribute('data-val') || '90') / 100;
+
+    showLog(t('logRenderingPage', { n: pageNum }));
+    const page = await pdfDoc.getPage(pageNum);
+    const canvas = await renderPageToCanvas(page, outW, outH);
+
+    const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+    const ext = format === 'png' ? 'png' : 'jpg';
+    const dataUrl = canvas.toDataURL(mime, quality);
+
+    downloadDataUrl(dataUrl, `${fileName}_p${pageNum.toString().padStart(2, '0')}.${ext}`);
+    showLog(t('logDownloadStarted'));
+  };
+
+  const exportSingle = async (format: 'jpeg' | 'png') => {
+    if (selectedPages.length === 0) return;
+    await exportSinglePage(selectedPages[0], format);
+  };
+
+  const createTarGz = (files: { name: string; data: Uint8Array }[]) => {
+    let tarSize = 0;
+    files.forEach(f => {
+      tarSize += 512 + Math.ceil(f.data.length / 512) * 512;
+    });
+    tarSize += 1024;
+
+    const tarBuffer = new Uint8Array(tarSize);
+    let offset = 0;
+
+    files.forEach(f => {
+      const header = new Uint8Array(512);
+      for (let i = 0; i < f.name.length && i < 100; i++) header[i] = f.name.charCodeAt(i);
+      const mode = '0000644\0';
+      for (let i = 0; i < 8; i++) header[100 + i] = mode.charCodeAt(i);
+      const uid = '0000000\0';
+      for (let i = 0; i < 8; i++) header[108 + i] = uid.charCodeAt(i);
+      const gid = '0000000\0';
+      for (let i = 0; i < 8; i++) header[116 + i] = gid.charCodeAt(i);
+      const sizeStr = f.data.length.toString(8).padStart(11, '0') + '\0';
+      for (let i = 0; i < 12; i++) header[124 + i] = sizeStr.charCodeAt(i);
+      const mtimeStr = Math.floor(Date.now() / 1000).toString(8).padStart(11, '0') + '\0';
+      for (let i = 0; i < 12; i++) header[136 + i] = mtimeStr.charCodeAt(i);
+      header[156] = '0'.charCodeAt(0);
+      const magic = 'ustar\0';
+      for (let i = 0; i < 6; i++) header[257 + i] = magic.charCodeAt(i);
+      header[263] = '0'.charCodeAt(0);
+      header[264] = '0'.charCodeAt(0);
+
+      for (let i = 0; i < 8; i++) header[148 + i] = 32;
+      let sum = 0;
+      for (let i = 0; i < 512; i++) sum += header[i];
+      const chksumStr = sum.toString(8).padStart(6, '0') + '\0 ';
+      for (let i = 0; i < 8; i++) header[148 + i] = chksumStr.charCodeAt(i);
+
+      tarBuffer.set(header, offset);
+      offset += 512;
+      tarBuffer.set(f.data, offset);
+      offset += Math.ceil(f.data.length / 512) * 512;
+    });
+
+    const gzData = pako.gzip(tarBuffer);
+    return new Blob([gzData], { type: 'application/gzip' });
+  };
+
+  const exportMultiple = async () => {
+    if (!pdfDoc || selectedPages.length === 0) return;
+    const format = (document.getElementById('export-package-format') as HTMLSelectElement)?.value || 'zip';
+    const outW = Math.max(1, Math.min(8000, Math.round(Number(outputWidth) || 1080)));
+    const outH = Math.max(1, Math.min(8000, Math.round(Number(outputHeight) || 1080)));
+    const quality = Number(document.getElementById('export-quality')?.getAttribute('data-val') || '90') / 100;
+
+    setProgress(0);
+    const files: { name: string; data: Uint8Array }[] = [];
+
+    for (let i = 0; i < selectedPages.length; i++) {
+      const pageNum = selectedPages[i];
+      showLog(t('logRenderingPage', { n: pageNum }));
+
+      const page = await pdfDoc.getPage(pageNum);
+      const canvas = await renderPageToCanvas(page, outW, outH);
+      const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b as Blob), 'image/jpeg', quality));
+      const arrayBuffer = await blob.arrayBuffer();
+      files.push({
+        name: `${fileName}_p${pageNum.toString().padStart(2, '0')}.jpg`,
+        data: new Uint8Array(arrayBuffer)
+      });
+      setProgress(((i + 1) / selectedPages.length) * 100);
+    }
+
+    showLog(t('logPackaging'));
+
+    if (format === 'zip') {
+      const zip = new JSZip();
+      files.forEach(f => zip.file(f.name, f.data));
+      const content = await zip.generateAsync({ type: 'blob' });
+      downloadDataUrl(URL.createObjectURL(content), `${fileName}_images.zip`);
     } else {
-      setter(Math.round(num));
+      const tarBlob = createTarGz(files);
+      downloadDataUrl(URL.createObjectURL(tarBlob), `${fileName}_images.tar.gz`);
     }
+
+    setProgress(null);
+    showLog(t('logReady'));
   };
 
-  const swapDimensions = () => {
-    if (resolutionMode === 'custom') {
-      setOutputHeight(outputWidth);
-      setOutputWidth(outputHeight);
-    }
+  const exportQuality = useMemo(() => 90, []);
+
+  const handleQualityChange = (value: number) => {
+    const el = document.getElementById('export-quality');
+    if (el) el.setAttribute('data-val', String(value));
+    const label = document.getElementById('val-quality');
+    if (label) label.textContent = String(value);
   };
 
+  const refreshPreview = () => updatePreview();
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-lg p-8">
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left Column: Configuration */}
-          <div className="space-y-6">
-
-            {/* Header */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-sm text-gray-400">
-                  {t('byLabel')}{' '}
-                  <a
-                    href="https://www.instagram.com/sender.ia/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-300 hover:text-indigo-100 underline underline-offset-2 transition-colors"
-                  >
-                    sender.ia
-                  </a>
-                </h3>
-                <div className="flex items-center gap-2 text-xs sm:text-sm">
-                  <button
-                    type="button"
-                    onClick={() => setLang('en')}
-                    className={`flex items-center gap-1 pb-0.5 border-b-2 ${
-                      lang === 'en'
-                        ? 'border-indigo-400 opacity-100'
-                        : 'border-transparent opacity-40 hover:opacity-70'
-                    }`}
-                  >
-                    <span>🇬🇧</span>
-                    <span className="hidden sm:inline">EN</span>
-                  </button>
-                  <span className="text-gray-500">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setLang('es')}
-                    className={`flex items-center gap-1 pb-0.5 border-b-2 ${
-                      lang === 'es'
-                        ? 'border-indigo-400 opacity-100'
-                        : 'border-transparent opacity-40 hover:opacity-70'
-                    }`}
-                  >
-                    <span className="hidden sm:inline">ES</span>
-                    <span>🇪🇸</span>
-                  </button>
-                </div>
-              </div>
-              <h1 className="app-title text-white mt-3">{t('appTitle')}</h1>
-              <p className="text-xs uppercase tracking-widest text-gray-500 mt-1">{t('appTagline')}</p>
-              <h2 className="text-lg font-medium text-indigo-400 mt-2">{t('appSubtitle')}</h2>
+    <div id="app-container">
+      <div id="left-panel">
+        <div style={{ padding: '1.5rem 1rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>
+          <div className="header-top" style={{ marginBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)', margin: 0 }}>
+              {t('byLabel')}{' '}
+              <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-teal)', textDecoration: 'none' }}>
+                sender.ia
+              </a>
+            </h3>
+            <div className="lang-switch">
+              <button type="button" className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>
+                ???? <span className="lang-text">EN</span>
+              </button>
+              <span className="lang-divider">|</span>
+              <button type="button" className={`lang-btn ${lang === 'es' ? 'active' : ''}`} onClick={() => setLang('es')}>
+                <span className="lang-text">ES</span> ????
+              </button>
             </div>
-
-            {/* 1. PDF Uploader */}
-            <div>
-              <label className="text-lg font-semibold mb-2 block">{t('step1')}</label>
-              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700" onClick={() => fileInputRef.current?.click()}>
-                <UploadCloud className="w-10 h-10 text-gray-400 mb-2" />
-                {pdfFile ? (
-                  <div className="text-center">
-                    <p className="font-semibold text-indigo-400">{pdfName}</p>
-                    <span className="text-sm text-gray-400">{t('pages', { n: totalPages })}</span>
-                  </div>
-                ) : (
-                  <p className="text-gray-400">{t('dropzone')}</p>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-2">{t('officeHint')}</p>
-              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
-              <div className="mt-4">
-                <label className="text-sm font-medium mb-2 block">{t('urlLabel')}</label>
-                <div className="flex gap-2">
-                  <input type="text" placeholder={t('urlPlaceholder')} value={urlInput} onChange={e => setUrlInput(e.target.value)} className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                  <button onClick={handleLoadFromUrl} disabled={isProcessing} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded-lg text-sm">{t('loadBtn')}</button>
-                </div>
-                <label className="text-xs text-gray-400 mt-2 block">{t('proxyLabel')}</label>
-                <input type="text" placeholder={t('proxyPlaceholder')} value={proxyUrl} onChange={e => setProxyUrl(e.target.value)} className="w-full mt-1 bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                <p className="text-xs text-gray-500 mt-2">{t('googleHint')}</p>
-              </div>
-            </div>
-
-            {/* 2. Page Selection */}
-            {totalPages > 0 && (
-                <div>
-                  <label className="text-lg font-semibold mb-2 block">
-                    {t('step2')} ({selectedPages.length}/{totalPages})
-                  </label>
-                  <div className="max-h-32 overflow-y-auto grid grid-cols-5 gap-2 p-2 bg-gray-700 rounded-lg">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
-                      <button key={pageNum} onClick={() => togglePageSelection(pageNum)} className={`p-2 rounded-md text-sm ${selectedPages.includes(pageNum) ? 'bg-indigo-500 text-white' : 'bg-gray-600 hover:bg-gray-500'}`}>{pageNum}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-indigo-300 mt-2">{t('pagesSelected', { n: selectedPages.length })}</p>
-                </div>
-            )}
-
-            {/* 3. Output Resolution */}
-            <div>
-              <label className="text-lg font-semibold mb-2 block">{t('step3')}</label>
-              <div className="flex border-b border-gray-700 mb-4">
-                <button onClick={() => setResolutionMode('custom')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'custom' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>{t('custom')}</button>
-                <button onClick={() => setResolutionMode('social')} className={`py-2 px-4 text-sm font-medium ${resolutionMode === 'social' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-gray-400 hover:text-white'}`}>{t('socialMedia')}</button>
-              </div>
-
-              {resolutionMode === 'custom' ? (
-                <div className='space-y-4'>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400 mb-1 block">{t('width')}</label>
-                      <input id="out-width" data-testid="out-width" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputWidth} onChange={e => handleDimensionChange(e.target.value, setOutputWidth)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputWidth, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
-                    </div>
-                    <span className="text-gray-400 mt-5">×</span>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400 mb-1 block">{t('height')}</label>
-                      <input id="out-height" data-testid="out-height" type="number" inputMode="numeric" pattern="[0-9]*" min="1" max="8000" value={outputHeight} onChange={e => handleDimensionChange(e.target.value, setOutputHeight)} onBlur={e => handleDimensionBlur((e.target as HTMLInputElement).value, setOutputHeight, 1080)} onKeyDown={handleNumericKeyDown} onPaste={handlePasteNumeric} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"/>
-                    </div>
-                  </div>
-                  <button onClick={swapDimensions} className="w-full flex items-center justify-center gap-2 text-sm py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg"><RefreshCw size={14}/> {t('swap')}</button>
-                </div>
-              ) : (
-                <div>
-                  <select value={socialPreset} onChange={e => setSocialPreset(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                    {Object.keys(socialResolutions).map(key => <option key={key} value={key}>{key} ({socialResolutions[key as keyof typeof socialResolutions].width}x{socialResolutions[key as keyof typeof socialResolutions].height})</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-            
-            {/* 4. Logo (Optional) */}
-            <div>
-              <label className="text-lg font-semibold mb-2 block">{t('step4')}</label>
-               <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700" onClick={() => logoInputRef.current?.click()}>
-                <UploadCloud className="w-10 h-10 text-gray-400 mb-2" />
-                {logoFile ? (
-                  <div className="text-center">
-                    <p className="font-semibold text-indigo-400">{logoName}</p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLogoFile(null);
-                        setLogoName('');
-                      }}
-                      className="text-xs text-red-400 hover:text-red-300 mt-1"
-                    >
-                      {t('remove')}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-gray-400">{t('uploadLogo')}</p>
-                )}
-              </div>
-              <input type="file" ref={logoInputRef} onChange={handleLogoChange} className="hidden" accept="image/*" />
-            </div>
-
-            {/* 5. Logo Position */}
-            {logoFile && (
-              <div>
-                <label className="text-lg font-semibold mb-2 block">{t('logoPositionTitle')}</label>
-                <p className="text-xs text-gray-400 mb-2">{t('position')}</p>
-                <div className="grid grid-cols-3 gap-2 bg-gray-700 p-2 rounded-lg">
-                  <button onClick={() => setLogoPosition('topLeft')} className={`p-2 rounded-md flex justify-center ${logoPosition === 'topLeft' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><CornerUpLeft/></button>
-                  <div></div>
-                  <button onClick={() => setLogoPosition('topRight')} className={`p-2 rounded-md flex justify-center ${logoPosition === 'topRight' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><CornerUpRight/></button>
-                  <div></div>
-                  <button onClick={() => setLogoPosition('center')} className={`p-2 rounded-md flex justify-center items-center ${logoPosition === 'center' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><Droplets size={20}/></button>
-                  <div></div>
-                  <button onClick={() => setLogoPosition('bottomLeft')} className={`p-2 rounded-md flex justify-center ${logoPosition === 'bottomLeft' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><CornerDownLeft/></button>
-                  <div></div>
-                  <button onClick={() => setLogoPosition('bottomRight')} className={`p-2 rounded-md flex justify-center ${logoPosition === 'bottomRight' ? 'bg-indigo-500' : 'hover:bg-gray-600'}`}><CornerDownRight/></button>
-                </div>
-                {logoPosition === 'center' && (
-                  <div className="mt-4">
-                    <label htmlFor="opacity" className="block text-sm font-medium text-gray-300">
-                      {t('logoOpacityLabel', { n: Math.round(logoOpacity * 100) })}
-                    </label>
-                    <input type="range" id="opacity" min="0.1" max="1" step="0.1" value={logoOpacity} onChange={e => setLogoOpacity(parseFloat(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Process Button */}
-            <button onClick={processPdf} disabled={(!pdfFile && !pdfBuffer) || isProcessing || selectedPages.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
-              {isProcessing ? t('processing') : t('generateImages')}
-            </button>
           </div>
+          <h1 className="app-title" style={{ color: 'var(--accent-teal)', marginBottom: '0.5rem' }}>{t('appTitle')}</h1>
+          <h2 style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-main)', marginBottom: '0.5rem', lineHeight: 1.4 }}>{t('appSubtitle')}</h2>
+          <p style={{ fontSize: '0.75rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{t('appTagline')}</p>
+        </div>
 
-          {/* Right Column: Preview */}
-          <div className="bg-gray-900 p-4 rounded-lg h-full min-h-[400px] flex flex-col">
-            <h2 className="text-lg font-semibold mb-4 text-center">{t('generatedImages')}</h2>
-            {generatedImages.length > 0 && (
-              <div className="flex items-center justify-between mb-2">
-                 <p className="text-sm text-gray-400">
-                   {generatedImages.length === 1
-                     ? t('showingImage', { n: generatedImages.length })
-                     : t('showingImages', { n: generatedImages.length })}
-                 </p>
-                 <button onClick={downloadAllAsZip} className="flex items-center gap-2 text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-lg">
-                  <Download size={16} /> {t('downloadPackage')} (.zip)
-                </button>
+        <div className="accordion-item active">
+          <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            <span className="accordion-title">{t('step1')}</span>
+          </div>
+          <div className="accordion-content">
+            <div
+              id="drop-zone"
+              className={dragOver ? 'dragover' : ''}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <p>{t('dropzone')}</p>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.doc,.docx,.ppt,.pptx" style={{ display: 'none' }} />
+            </div>
+            <p className="warning-text" style={{ display: 'block' }}>{t('officeHint')}</p>
+
+            <div style={{ marginTop: '1rem' }}>
+              <label>{t('urlLabel')}</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input type="text" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder={t('urlPlaceholder')} />
+                <button onClick={handleLoadFromUrl} style={{ width: 'auto' }} disabled={isLoadingUrl}>{t('loadBtn')}</button>
+              </div>
+              {showGdocsWarning && <p className="warning-text" style={{ display: 'block' }}>{t('googleHint')}</p>}
+              {showGdriveWarning && <p className="warning-text" style={{ display: 'block' }}>{t('gdriveHint')}</p>}
+            </div>
+
+            {pdfDoc && (
+              <div id="pdf-info" style={{ display: 'block' }}>
+                <div id="pdf-info-text">{t('pagesInfo', { name: fileName, n: numPages })}</div>
+                <div id="thumbnails-container">
+                  {thumbnails.map((thumb) => (
+                    <div
+                      key={thumb.page}
+                      className={`thumbnail ${thumb.page === currentPagePreview ? 'active' : ''}`}
+                      style={{ backgroundImage: `url(${thumb.url})`, display: selectedPages.includes(thumb.page) ? 'block' : 'none' }}
+                      onClick={() => { setCurrentPagePreview(thumb.page); }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
-            <div className="flex-grow overflow-y-auto space-y-4 pr-2">
-              {isProcessing ? (
-                <div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-400"></div></div>
-              ) : generatedImages.length === 0 ? (
-                 <div className="flex flex-col justify-center items-center h-full text-center text-gray-500"><ImageIcon size={48} className="mb-2"/><p>{t('emptyState')}</p></div>
-              ) : (
-                generatedImages.map((imgSrc, index) => (
-                  <div key={index} className="relative group">
-                    <img src={imgSrc} alt={t('generatedPageAlt', { n: selectedPages[index] })} className="w-full h-auto rounded-md" />
-                     <a href={imgSrc} download={`page_${selectedPages[index]}.png`} className="absolute bottom-2 right-2 bg-indigo-600 p-2 rounded-full opacity-0 group-hover:opacity-100"><Download size={18} /></a>
-                  </div>
-                ))
-              )}
+          </div>
+        </div>
+
+        <div className="accordion-item">
+          <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="9"></rect><rect x="14" y="7" width="3" height="5"></rect></svg>
+            <span className="accordion-title">{t('step2')}</span>
+          </div>
+          <div className="accordion-content">
+            <div className="radio-group">
+              <label className="radio-label">
+                <input type="radio" name="page-selection" value="all" checked={pageSelectionMode === 'all'} onChange={() => setPageSelectionMode('all')} />
+                <span>{t('allDoc')}</span>
+              </label>
+              <label className="radio-label">
+                <input type="radio" name="page-selection" value="custom" checked={pageSelectionMode === 'custom'} onChange={() => setPageSelectionMode('custom')} />
+                <span>{t('specificPages')}</span>
+              </label>
+            </div>
+            {pageSelectionMode === 'custom' && (
+              <div id="custom-pages-container">
+                <label>{t('pagesPlaceholder')}</label>
+                <input type="text" value={customPagesInput} onChange={(e) => setCustomPagesInput(e.target.value)} placeholder={t('pagesPlaceholder')} />
+              </div>
+            )}
+            <p style={{ fontSize: '0.8rem', color: 'var(--accent-teal)', marginTop: '0.5rem' }} id="selected-pages-count">
+              {t('pagesSelected', { n: selectedPages.length })}
+            </p>
+          </div>
+        </div>
+
+        <div className="accordion-item">
+          <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            <span className="accordion-title">{t('step3')}</span>
+          </div>
+          <div className="accordion-content" style={{ paddingTop: 0 }}>
+            <div className="tabs">
+              <div className={`tab ${resolutionTab === 'custom' ? 'active' : ''}`} onClick={() => setResolutionTab('custom')}>{t('custom')}</div>
+              <div className={`tab ${resolutionTab === 'social' ? 'active' : ''}`} onClick={() => setResolutionTab('social')}>{t('socialMedia')}</div>
+            </div>
+
+            <div id="custom-res" className={`tab-content ${resolutionTab === 'custom' ? 'active' : ''}`}>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label>{t('width')}</label>
+                  <input
+                    type="number"
+                    value={outputWidth}
+                    onKeyDown={handleDimensionKeyDown}
+                    onPaste={handleDimensionPaste}
+                    onChange={(e) => handleDimensionChange(e.target.value, setOutputWidth)}
+                    onBlur={(e) => handleDimensionBlur(e.target.value, setOutputWidth)}
+                  />
+                </div>
+                <div>
+                  <label>{t('height')}</label>
+                  <input
+                    type="number"
+                    value={outputHeight}
+                    onKeyDown={handleDimensionKeyDown}
+                    onPaste={handleDimensionPaste}
+                    onChange={(e) => handleDimensionChange(e.target.value, setOutputHeight)}
+                    onBlur={(e) => handleDimensionBlur(e.target.value, setOutputHeight)}
+                  />
+                </div>
+              </div>
+              <button className="secondary" onClick={handleSwapDimensions}>{t('swap')}</button>
+            </div>
+
+            <div id="social-res" className={`tab-content ${resolutionTab === 'social' ? 'active' : ''}`}>
+              <div className="social-grid" id="social-grid-container">
+                {socialFormats.map((fmt, idx) => {
+                  const ratio = fmt.w / fmt.h;
+                  let svgW = 40; let svgH = 40;
+                  if (ratio > 1) { svgH = 40 / ratio; } else { svgW = 40 * ratio; }
+                  return (
+                    <div key={`${fmt.net}-${idx}`} className={`social-card ${socialIndex === idx ? 'active' : ''}`} onClick={() => handleSelectSocial(idx)}>
+                      <svg viewBox="0 0 50 50">
+                        <rect x={25 - svgW / 2} y={25 - svgH / 2} width={svgW} height={svgH} rx="2"></rect>
+                      </svg>
+                      <div className="social-title">{fmt.net} {t(fmt.nameKey)}</div>
+                      <div className="social-dim">{fmt.w}x{fmt.h}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
-        <div className="mt-8 text-center text-xs text-gray-500">{t('footer')}</div>
+
+        <div className="accordion-item">
+          <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
+            <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span className="accordion-title">{t('step4')}</span>
+          </div>
+          <div className="accordion-content">
+            <div className="toggle-row">
+              <span style={{ fontSize: '0.85rem' }}>{t('activateLogo')}</span>
+              <label className="switch">
+                <input type="checkbox" checked={logoActive} onChange={(e) => setLogoActive(e.target.checked)} />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {logoActive && (
+              <div id="logo-settings" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                <div>
+                  <label>{t('uploadLogo')}</label>
+                  <input type="file" ref={logoInputRef} onChange={handleLogoChange} accept="image/png,image/jpeg" style={{ fontSize: '0.75rem' }} />
+                  {logoPreviewUrl && <img src={logoPreviewUrl} alt="Logo preview" style={{ maxWidth: '100px', maxHeight: '50px', marginTop: '0.5rem' }} />}
+                </div>
+
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input type="radio" name="logo-mode" value="corner" checked={logoMode === 'corner'} onChange={() => setLogoMode('corner')} />
+                    <span>{t('corner')}</span>
+                  </label>
+                  <label className="radio-label">
+                    <input type="radio" name="logo-mode" value="center" checked={logoMode === 'center'} onChange={() => setLogoMode('center')} />
+                    <span>{t('center')}</span>
+                  </label>
+                </div>
+
+                {logoMode === 'corner' && (
+                  <div id="logo-corner-settings">
+                    <label>{t('position')}</label>
+                    <div className="placement-grid" id="placement-grid">
+                      <div className={`placement-cell ${logoCornerPos === 'tl' ? 'active' : ''}`} onClick={() => setLogoCornerPos('tl')}></div>
+                      <div className={`placement-cell ${logoCornerPos === 'tr' ? 'active' : ''}`} onClick={() => setLogoCornerPos('tr')}></div>
+                      <div className={`placement-cell ${logoCornerPos === 'bl' ? 'active' : ''}`} onClick={() => setLogoCornerPos('bl')}></div>
+                      <div className={`placement-cell ${logoCornerPos === 'br' ? 'active' : ''}`} onClick={() => setLogoCornerPos('br')}></div>
+                    </div>
+
+                    <label style={{ marginTop: '1rem' }}>{t('sizePercent')}</label>
+                    <div className="slider-row">
+                      <input type="range" min="5" max="40" value={logoSizeCorner} onChange={(e) => setLogoSizeCorner(Number(e.target.value))} />
+                      <span className="slider-val">{logoSizeCorner}</span>
+                    </div>
+
+                    <label style={{ marginTop: '0.5rem' }}>{t('margin')}</label>
+                    <div className="slider-row">
+                      <input type="range" min="10" max="100" value={logoMargin} onChange={(e) => setLogoMargin(Number(e.target.value))} />
+                      <span className="slider-val">{logoMargin}</span>
+                    </div>
+
+                    <div className="toggle-row" style={{ marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem' }}>{t('dropShadow')}</span>
+                      <label className="switch">
+                        <input type="checkbox" checked={logoShadow} onChange={(e) => setLogoShadow(e.target.checked)} />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {logoMode === 'center' && (
+                  <div id="logo-center-settings">
+                    <label>{t('sizePercent')}</label>
+                    <div className="slider-row">
+                      <input type="range" min="20" max="80" value={logoSizeCenter} onChange={(e) => setLogoSizeCenter(Number(e.target.value))} />
+                      <span className="slider-val">{logoSizeCenter}</span>
+                    </div>
+
+                    <label style={{ marginTop: '0.5rem' }}>{t('opacity')}</label>
+                    <div className="slider-row">
+                      <input type="range" min="10" max="60" value={logoOpacity} onChange={(e) => setLogoOpacity(Number(e.target.value))} />
+                      <span className="slider-val">{logoOpacity}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="accordion-item">
+          <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span className="accordion-title">{t('step5')}</span>
+          </div>
+          <div className="accordion-content">
+            <label>{t('jpgQuality')}</label>
+            <div className="slider-row" style={{ marginBottom: '1rem' }}>
+              <input
+                id="export-quality"
+                type="range"
+                min="60"
+                max="100"
+                defaultValue={exportQuality}
+                data-val={exportQuality}
+                onChange={(e) => handleQualityChange(Number(e.target.value))}
+              />
+              <span className="slider-val" id="val-quality">{exportQuality}</span>
+            </div>
+
+            {selectedPages.length === 1 && (
+              <div id="export-single" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <button onClick={() => exportSingle('jpeg')}>{t('downloadJpg')}</button>
+                <button className="secondary" onClick={() => exportSingle('png')}>{t('downloadPng')}</button>
+              </div>
+            )}
+
+            {selectedPages.length > 1 && (
+              <div id="export-multi" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label>{t('packageFormat')}</label>
+                <select id="export-package-format">
+                  <option value="zip">ZIP</option>
+                  <option value="targz">TAR.GZ</option>
+                </select>
+                <button onClick={exportMultiple}>{t('downloadPackage')}</button>
+                {selectedPages.length <= 5 && (
+                  <div id="export-individual-btns" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
+                    <label>{t('downloadIndividual')}</label>
+                    {selectedPages.map(p => (
+                      <button key={p} className="secondary" style={{ padding: '0.3rem', fontSize: '0.75rem' }} onClick={() => exportSinglePage(p, 'jpeg')}>
+                        {t('pageLabelJpg', { n: p })}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div id="left-footer" dangerouslySetInnerHTML={{ __html: t('footerHtml') }} />
+      </div>
+
+      <div id="right-panel">
+        {progress !== null && (
+          <div id="progress-container">
+            <div id="progress-bar" style={{ width: `${progress}%` }}></div>
+          </div>
+        )}
+        {logMessage && <div id="log-area">{logMessage}</div>}
+
+        <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10 }}>
+          <button className="secondary" style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={refreshPreview}>
+            {t('refreshPreview')}
+          </button>
+        </div>
+
+        <div id="preview-container">
+          <canvas id="preview-canvas" ref={previewCanvasRef} width={Number(outputWidth) || 1080} height={Number(outputHeight) || 1080}></canvas>
+        </div>
+        <div id="preview-info"></div>
       </div>
     </div>
   );
