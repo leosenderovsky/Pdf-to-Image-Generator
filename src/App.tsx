@@ -8,6 +8,27 @@ import { useLanguage } from './i18n';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   workerUrl || `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
+const OWN_PROXY = (url: string) =>
+  `/api/proxy?url=${encodeURIComponent(url)}`;
+
+const CORS_PROXIES = [
+  OWN_PROXY,
+  (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+];
+
+const normalizeGdriveUrl = (url: string): string => {
+  const matchFile = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchFile) {
+    return `https://drive.google.com/uc?export=download&id=${matchFile[1]}&confirm=t`;
+  }
+  const matchShort = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchShort) {
+    return `https://drive.google.com/uc?export=download&id=${matchShort[1]}&confirm=t`;
+  }
+  return url;
+};
+
 type LogoMode = 'corner' | 'center';
 type LogoCornerPos = 'tl' | 'tr' | 'bl' | 'br';
 type ResolutionTab = 'custom' | 'social';
@@ -141,29 +162,6 @@ function App() {
     }, 3000);
   };
 
-  const CORS_PROXIES = [
-    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`
-  ];
-
-  const normalizeUrl = (rawUrl: string): { url: string; isGdrive: boolean } => {
-    let url = rawUrl.trim();
-    let isGdrive = false;
-
-    const gdriveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (gdriveMatch) {
-      url = `https://drive.google.com/uc?export=download&id=${gdriveMatch[1]}`;
-      isGdrive = true;
-    }
-
-    if (url.includes('docs.google.com')) {
-      isGdrive = true;
-    }
-
-    return { url, isGdrive };
-  };
-
   const setupPdf = async (doc: pdfjsLib.PDFDocumentProxy, name: string) => {
     setPdfDoc(doc);
     setNumPages(doc.numPages);
@@ -255,7 +253,14 @@ function App() {
     setIsLoadingUrl(true);
     showLog(t('logLoadingUrl'));
 
-    const { url, isGdrive } = normalizeUrl(rawUrl);
+    let url = rawUrl;
+    let isGdrive = false;
+
+    if (rawUrl.includes('drive.google.com') || rawUrl.includes('docs.google.com')) {
+      url = normalizeGdriveUrl(rawUrl);
+      isGdrive = true;
+    }
+
     const isGdocs = rawUrl.includes('docs.google.com');
     setShowGdriveWarning(isGdrive);
     setShowGdocsWarning(isGdocs);
@@ -292,8 +297,9 @@ function App() {
     // eslint-disable-next-line no-console
     console.error('Todos los proxies fallaron:', lastError);
     setLoadError(
-      'No se pudo cargar el PDF desde la URL. Verificá que el archivo sea público y accesible. ' +
-      'Si es de Google Drive, asegurate de que el modo sea "Cualquiera con el enlace puede ver".'
+      lang === 'es'
+        ? 'No se pudo cargar el PDF desde la URL. Verificá que el archivo sea público y accesible.'
+        : 'Could not load the PDF from the URL. Make sure the file is publicly accessible.'
     );
     setIsLoading(false);
     setIsLoadingUrl(false);
