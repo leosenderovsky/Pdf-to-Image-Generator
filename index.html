@@ -806,7 +806,7 @@
     reader.readAsArrayBuffer(file);
   }
 
-  function loadFromUrl() {
+  async function loadFromUrl() {
     let url = document.getElementById('url-input').value.trim();
     if (!url) return;
     
@@ -822,21 +822,46 @@
       const driveMatch = url.match(driveRegex);
       if (driveMatch) {
         const fileId = driveMatch[1];
-        const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-        // Usar un proxy CORS para evitar el bloqueo de seguridad de Google Drive
-        url = 'https://corsproxy.io/?' + encodeURIComponent(directUrl);
+        url = `https://drive.google.com/uc?export=download&id=${fileId}`;
         document.getElementById('url-input').value = url;
         document.getElementById('gdrive-warning').style.display = 'block';
       }
     }
 
-    showLog('Cargando desde URL...');
-    const loadingTask = pdfjsLib.getDocument({ url: url, withCredentials: false });
-    loadingTask.promise.then(pdf => {
-      setupPdf(pdf);
-    }).catch(err => {
+    showLog('Cargando desde URL a través de proxy...');
+    const btn = document.querySelector('button[onclick="loadFromUrl()"]');
+    if (btn) btn.disabled = true;
+
+    try {
+      // 1. Intentar fetch a través del proxy de Netlify
+      let proxyEndpoint = `/api/fetch-pdf?url=${encodeURIComponent(url)}`;
+      let res = await fetch(proxyEndpoint);
+      
+      // Fallback a Netlify Functions puras
+      if (!res.ok) {
+        proxyEndpoint = `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(url)}`;
+        res = await fetch(proxyEndpoint);
+      }
+      
+      if (!res.ok) {
+        throw new Error(`El servidor devolvió HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const buffer = await res.arrayBuffer();
+      
+      const loadingTask = pdfjsLib.getDocument({ data: buffer });
+      const pdf = await loadingTask.promise;
+      
+      let guessedName = url.split('/').pop() || 'documento';
+      if (guessedName.includes('?')) guessedName = guessedName.split('?')[0];
+      state.fileName = guessedName.replace('.pdf', '');
+      
+      await setupPdf(pdf);
+    } catch (err) {
       alert('Error cargando PDF desde URL. Puede ser un problema de CORS, archivo privado o URL inválida.\n' + err.message);
-    });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function loadPdfData(data) {
