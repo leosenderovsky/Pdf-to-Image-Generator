@@ -141,49 +141,27 @@ function App() {
     }, 3000);
   };
 
-  const normalizeGoogleDriveUrl = (url: string) => {
-    try {
-      const u = new URL(url);
-      if (u.hostname.endsWith('drive.google.com')) {
-        const path = u.pathname;
-        const fileIdMatch = path.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-        if (fileIdMatch) return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
-        const id = u.searchParams.get('id');
-        if (id) return `https://drive.google.com/uc?export=download&id=${id}`;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return url;
-  };
+  const CORS_PROXIES = [
+    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`
+  ];
 
-  const loadPdfFromUrl = async (rawUrl: string) => {
+  const normalizeUrl = (rawUrl: string): { url: string; isGdrive: boolean } => {
     let url = rawUrl.trim();
-    setShowGdocsWarning(false);
-    setShowGdriveWarning(false);
-
-    if (url.includes('docs.google.com') && url.includes('/edit')) {
-      url = url.replace(/\/edit.*$/, '/export?format=pdf');
-      setShowGdocsWarning(true);
-      setUrlInput(url);
-    }
+    let isGdrive = false;
 
     const gdriveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
     if (gdriveMatch) {
       url = `https://drive.google.com/uc?export=download&id=${gdriveMatch[1]}`;
-      setShowGdriveWarning(true);
-      setUrlInput(url);
+      isGdrive = true;
     }
 
-    const proxiedUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-    try {
-      const loadingTask = pdfjsLib.getDocument(proxiedUrl);
-      return await loadingTask.promise;
-    } catch (err) {
-      const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const loadingTask = pdfjsLib.getDocument(fallbackUrl);
-      return await loadingTask.promise;
+    if (url.includes('docs.google.com')) {
+      isGdrive = true;
     }
+
+    return { url, isGdrive };
   };
 
   const setupPdf = async (doc: pdfjsLib.PDFDocumentProxy, name: string) => {
@@ -268,27 +246,100 @@ function App() {
     await handleFileLoad(file);
   };
 
-  const handleLoadFromUrl = async () => {
+  const handleUrlLoad = async () => {
     const rawUrl = urlInput.trim();
     if (!rawUrl) return;
+
+    setIsLoading(true);
+    setLoadError(null);
     setIsLoadingUrl(true);
     showLog(t('logLoadingUrl'));
-    try {
-      setIsLoading(true);
-      setLoadError(null);
-      const pdf = await loadPdfFromUrl(rawUrl);
-      const guessed = rawUrl.split('/').pop() || 'documento';
-      const name = guessed.includes('?') ? guessed.split('?')[0] : guessed;
-      await setupPdf(pdf, name.replace('.pdf', ''));
-      await renderPage(pdf, 1);
-    } catch (err) {
-      console.error('Error al cargar PDF desde URL:', err);
-      setLoadError('No se pudo cargar el PDF desde la URL. Verificá que sea pública y accesible.');
-    } finally {
-      setIsLoading(false);
-      setIsLoadingUrl(false);
+
+    const { url, isGdrive } = normalizeUrl(rawUrl);
+    const isGdocs = rawUrl.includes('docs.google.com');
+    setShowGdriveWarning(isGdrive);
+    setShowGdocsWarning(isGdocs);
+
+    let lastError: unknown = null;
+
+    for (const proxyFn of CORS_PROXIES) {
+      try {
+        const proxiedUrl = proxyFn(url);
+        // eslint-disable-next-line no-console
+        console.log('Intentando cargar desde:', proxiedUrl);
+
+        const loadingTask = pdfjsLib.getDocument({
+          url: proxiedUrl,
+          withCredentials: false,
+          httpHeaders: {}
+        });
+
+        const pdf = await loadingTask.promise;
+        const guessed = rawUrl.split('/').pop() || 'documento';
+        const name = guessed.includes('?') ? guessed.split('?')[0] : guessed;
+        await setupPdf(pdf, name.replace('.pdf', ''));
+        await renderPage(pdf, 1);
+        setIsLoading(false);
+        setIsLoadingUrl(false);
+        return;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Falló proxy, intentando siguiente...', err);
+        lastError = err;
+      }
     }
+
+    // eslint-disable-next-line no-console
+    console.error('Todos los proxies fallaron:', lastError);
+    setLoadError(
+      'No se pudo cargar el PDF desde la URL. Verificá que el archivo sea público y accesible. ' +
+      'Si es de Google Drive, asegurate de que el modo sea "Cualquiera con el enlace puede ver".'
+    );
+    setIsLoading(false);
+    setIsLoadingUrl(false);
   };
+
+  const LanguageSwitch = () => (
+    <div className="lang-switch" role="group" aria-label="Language selector">
+      <button
+        type="button"
+        onClick={() => setLang('en')}
+        className={lang === 'en' ? 'active' : ''}
+        aria-label="Switch to English"
+        title="English"
+      >
+        <img
+          src="https://flagcdn.com/w20/gb.png"
+          srcSet="https://flagcdn.com/w40/gb.png 2x"
+          width="20"
+          height="15"
+          alt="UK flag"
+          loading="lazy"
+        />
+        <span>EN</span>
+      </button>
+
+      <span className="lang-divider" aria-hidden="true">|</span>
+
+      <button
+        type="button"
+        onClick={() => setLang('es')}
+        className={lang === 'es' ? 'active' : ''}
+        aria-label="Cambiar a Español"
+        title="Español"
+      >
+        <img
+          src="https://flagcdn.com/w20/es.png"
+          srcSet="https://flagcdn.com/w40/es.png 2x"
+          width="20"
+          height="15"
+          alt="Spain flag"
+          loading="lazy"
+        />
+        <span>ES</span>
+      </button>
+    </div>
+  );
 
   const parsePageRanges = (str: string, max: number) => {
     if (!str.trim()) return [] as number[];
@@ -653,28 +704,23 @@ function App() {
   return (
     <div id="app-container">
       <div id="left-panel">
-        <div style={{ padding: '1.5rem 1rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>
+        <header style={{ padding: '1.5rem 1rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>
           <div className="header-top" style={{ marginBottom: '0.75rem' }}>
-            <h3 style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)', margin: 0 }}>
+            <LanguageSwitch />
+          </div>
+          <div className="header-content">
+            <h1 className="app-title" style={{ color: 'var(--accent-teal)', marginBottom: '0.5rem' }}>{t('appTitle')}</h1>
+            <p style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-main)', marginBottom: '0.5rem', lineHeight: 1.4 }}>
+              {t('appSubtitle')}
+            </p>
+            <p style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)', margin: 0 }}>
               {t('byLabel')}{' '}
               <a href="https://www.instagram.com/sender.ia/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-teal)', textDecoration: 'none' }}>
                 sender.ia
               </a>
-            </h3>
-            <div className="lang-switch">
-              <button type="button" className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>
-                ???? <span className="lang-text">EN</span>
-              </button>
-              <span className="lang-divider">|</span>
-              <button type="button" className={`lang-btn ${lang === 'es' ? 'active' : ''}`} onClick={() => setLang('es')}>
-                <span className="lang-text">ES</span> ????
-              </button>
-            </div>
+            </p>
           </div>
-          <h1 className="app-title" style={{ color: 'var(--accent-teal)', marginBottom: '0.5rem' }}>{t('appTitle')}</h1>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-main)', marginBottom: '0.5rem', lineHeight: 1.4 }}>{t('appSubtitle')}</h2>
-          <p style={{ fontSize: '0.75rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{t('appTagline')}</p>
-        </div>
+        </header>
 
         <div className="accordion-item active">
           <div className="accordion-header" onClick={(e) => (e.currentTarget.parentElement?.classList.toggle('active'))}>
@@ -699,8 +745,14 @@ function App() {
             <div style={{ marginTop: '1rem' }}>
               <label>{t('urlLabel')}</label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input type="text" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder={t('urlPlaceholder')} />
-                <button onClick={handleLoadFromUrl} style={{ width: 'auto' }} disabled={isLoadingUrl}>{t('loadBtn')}</button>
+                <input
+                  type="text"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleUrlLoad(); }}
+                  placeholder={t('urlPlaceholder')}
+                />
+                <button onClick={handleUrlLoad} style={{ width: 'auto' }} disabled={isLoadingUrl}>{t('loadBtn')}</button>
               </div>
               {showGdocsWarning && <p className="warning-text" style={{ display: 'block' }}>{t('googleHint')}</p>}
               {showGdriveWarning && <p className="warning-text" style={{ display: 'block' }}>{t('gdriveHint')}</p>}
