@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min?url';
 import JSZip from 'jszip';
 import pako from 'pako';
 import { useLanguage } from './i18n';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  workerUrl || `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 type LogoMode = 'corner' | 'center';
 type LogoCornerPos = 'tl' | 'tr' | 'bl' | 'br';
@@ -74,6 +76,8 @@ function App() {
   const [showGdocsWarning, setShowGdocsWarning] = useState(false);
   const [showGdriveWarning, setShowGdriveWarning] = useState(false);
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [dragOver, setDragOver] = useState(false);
 
@@ -153,57 +157,33 @@ function App() {
     return url;
   };
 
-  const loadPdfBufferFromUrl = async (url: string) => {
-    let currentUrl = url;
+  const loadPdfFromUrl = async (rawUrl: string) => {
+    let url = rawUrl.trim();
     setShowGdocsWarning(false);
     setShowGdriveWarning(false);
 
-    if (currentUrl.includes('docs.google.com') && currentUrl.includes('/edit')) {
-      currentUrl = currentUrl.replace(/\/edit.*$/, '/export?format=pdf');
+    if (url.includes('docs.google.com') && url.includes('/edit')) {
+      url = url.replace(/\/edit.*$/, '/export?format=pdf');
       setShowGdocsWarning(true);
-      setUrlInput(currentUrl);
-    } else {
-      const driveRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
-      const driveMatch = currentUrl.match(driveRegex);
-      if (driveMatch) {
-        const fileId = driveMatch[1];
-        currentUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-        setShowGdriveWarning(true);
-        setUrlInput(currentUrl);
-      }
+      setUrlInput(url);
     }
 
-    const proxyCandidates = [
-      `/api/fetch-pdf?url=${encodeURIComponent(currentUrl)}`,
-      `/.netlify/functions/pdf-proxy?url=${encodeURIComponent(currentUrl)}`
-    ];
-
-    for (const endpoint of proxyCandidates) {
-      try {
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.arrayBuffer();
-      } catch (err) {
-        // try next
-      }
+    const gdriveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (gdriveMatch) {
+      url = `https://drive.google.com/uc?export=download&id=${gdriveMatch[1]}`;
+      setShowGdriveWarning(true);
+      setUrlInput(url);
     }
 
-    const normalized = normalizeGoogleDriveUrl(currentUrl);
+    const proxiedUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
     try {
-      const res = await fetch(normalized, { mode: 'cors', redirect: 'follow' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument(proxiedUrl);
+      return await loadingTask.promise;
     } catch (err) {
-      // fallback to original url if normalized differs
+      const fallbackUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const loadingTask = pdfjsLib.getDocument(fallbackUrl);
+      return await loadingTask.promise;
     }
-
-    if (normalized !== currentUrl) {
-      const res = await fetch(currentUrl, { mode: 'cors', redirect: 'follow' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.arrayBuffer();
-    }
-
-    throw new Error('Failed to load PDF');
   };
 
   const setupPdf = async (doc: pdfjsLib.PDFDocumentProxy, name: string) => {
@@ -228,25 +208,56 @@ function App() {
       const ctx = canvas.getContext('2d');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      await page.render({ canvasContext: ctx!, viewport, background: 'transparent' }).promise;
+      await page.render({ canvasContext: ctx!, viewport, canvas, background: 'transparent' }).promise;
       thumbs.push({ page: i, url: canvas.toDataURL('image/jpeg', 0.5) });
     }
     setThumbnails(thumbs);
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'pdf') {
+  const renderPage = async (pdf: pdfjsLib.PDFDocumentProxy, pageNumber: number) => {
+    const page = await pdf.getPage(pageNumber);
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+
+    const viewport = page.getViewport({ scale: 1.5 });
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    const renderContext = {
+      canvasContext: context!,
+      viewport: viewport,
+      canvas
+    };
+    await page.render(renderContext).promise;
+  };
+
+  const handleFileLoad = async (file: File) => {
+    if (!file || file.type !== 'application/pdf') {
       alert(t('pdfOnlyAlert'));
       return;
     }
-    const buf = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({ data: buf });
-    const doc = await loadingTask.promise;
-    const name = file.name.replace('.pdf', '');
-    await setupPdf(doc, name);
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      const name = file.name.replace('.pdf', '');
+      await setupPdf(pdf, name);
+      await renderPage(pdf, 1);
+    } catch (err) {
+      console.error('Error al cargar PDF desde archivo:', err);
+      setLoadError('No se pudo cargar el archivo PDF.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await handleFileLoad(file);
   };
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
@@ -254,33 +265,27 @@ function App() {
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'pdf') {
-      alert(t('pdfOnlyAlert'));
-      return;
-    }
-    const buf = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({ data: buf });
-    const doc = await loadingTask.promise;
-    const name = file.name.replace('.pdf', '');
-    await setupPdf(doc, name);
+    await handleFileLoad(file);
   };
 
   const handleLoadFromUrl = async () => {
-    if (!urlInput.trim()) return;
+    const rawUrl = urlInput.trim();
+    if (!rawUrl) return;
     setIsLoadingUrl(true);
     showLog(t('logLoadingUrl'));
     try {
-      const buffer = await loadPdfBufferFromUrl(urlInput.trim());
-      const loadingTask = pdfjsLib.getDocument({ data: buffer });
-      const doc = await loadingTask.promise;
-      const guessed = urlInput.split('/').pop() || 'documento';
+      setIsLoading(true);
+      setLoadError(null);
+      const pdf = await loadPdfFromUrl(rawUrl);
+      const guessed = rawUrl.split('/').pop() || 'documento';
       const name = guessed.includes('?') ? guessed.split('?')[0] : guessed;
-      await setupPdf(doc, name.replace('.pdf', ''));
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      alert(t('loadError', { message: msg }));
+      await setupPdf(pdf, name.replace('.pdf', ''));
+      await renderPage(pdf, 1);
+    } catch (err) {
+      console.error('Error al cargar PDF desde URL:', err);
+      setLoadError('No se pudo cargar el PDF desde la URL. Verificá que sea pública y accesible.');
     } finally {
+      setIsLoading(false);
       setIsLoadingUrl(false);
     }
   };
@@ -384,7 +389,7 @@ function App() {
       const tempCtx = tempCanvas.getContext('2d');
       tempCanvas.width = viewportOriginal.width;
       tempCanvas.height = viewportOriginal.height;
-      await page.render({ canvasContext: tempCtx!, viewport: viewportOriginal, background: 'transparent' }).promise;
+      await page.render({ canvasContext: tempCtx!, viewport: viewportOriginal, canvas: tempCanvas, background: 'transparent' }).promise;
       bgColor = await detectBackgroundColor(tempCanvas);
       pageBackgroundColorsRef.current[pageNumber] = bgColor;
     }
@@ -408,7 +413,7 @@ function App() {
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
-    await page.render({ canvasContext: ctx, viewport, background: 'transparent' }).promise;
+    await page.render({ canvasContext: ctx, viewport, canvas, background: 'transparent' }).promise;
     ctx.restore();
 
     if (logoActive && logoImgRef.current) {
