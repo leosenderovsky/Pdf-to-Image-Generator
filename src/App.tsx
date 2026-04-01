@@ -892,7 +892,7 @@ function App() {
               <div id="logo-settings" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
                 <div>
                   <label>{t('uploadLogo')}</label>
-                  <input type="file" ref={logoInputRef} onChange={handleLogoChange} accept="image/png,image/jpeg" style={{ fontSize: '0.75rem' }} />
+                  <input type="file" ref={logoInputRef} onChange={handleLogoChange} accept="image/png,image/jpeg" />
                   {logoPreviewUrl && <img src={logoPreviewUrl} alt="Logo preview" style={{ maxWidth: '100px', maxHeight: '50px', marginTop: '0.5rem' }} />}
                 </div>
 
